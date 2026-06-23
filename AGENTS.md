@@ -1,3 +1,21 @@
 # Expo HAS CHANGED
 
 Read the exact versioned docs at https://docs.expo.dev/versions/v56.0.0/ before writing any code.
+
+## Skill-Priorität
+Für dieses Projekt sollen bei passenden Aufgaben die installierten Skills bevorzugt werden, insbesondere:
+- `expo-react-native-typescript`
+- `react-native-expo`
+- vorhandene Expo-Skills wie `expo-ui`, `expo-api-routes`, `expo-dev-client`, `expo-deployment`, `native-data-fetching`
+
+Diese Skills sind bei Expo-/React-Native-/UI-/Audio-/Skia-Aufgaben vor allgemeinen Antworten zu prüfen und zu nutzen.
+
+## Architektur-Grundsatz
+Für alle Audio-, Grafik- und Visualisierungsaufgaben gilt:
+
+- **Audio und Grafik strikt entkoppeln.**
+- Audioverarbeitung darf nicht vom Render-Takt der UI abhängen.
+- Grafik darf keine direkten Audiooperationen ausführen.
+- Kommunikation nur über Zustände, Events oder klare Service-Schnittstellen.
+
+Ziel ist, dass Audio und UI jeweils mit maximaler Performance und möglichst wenig Re-Renders arbeiten können.
