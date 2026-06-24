@@ -118,12 +118,14 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   contentContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
+    width: '100%',
+    alignItems: 'center',
   },
   container: {
+    width: '100%',
     maxWidth: MaxContentWidth,
     flexGrow: 1,
+    flexShrink: 1,
     gap: Spacing.three,
     paddingHorizontal: Spacing.three,
   },
