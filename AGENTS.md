@@ -19,3 +19,10 @@ Für alle Audio-, Grafik- und Visualisierungsaufgaben gilt:
 - Kommunikation nur über Zustände, Events oder klare Service-Schnittstellen.
 
 Ziel ist, dass Audio und UI jeweils mit maximaler Performance und möglichst wenig Re-Renders arbeiten können.
+
+## Rendering-Vorgabe für Visualisierung und Piano-UI
+
+- Für visuelle Piano-/Keyboard-/Grafik-Komponenten **Skia als Default-Rendering-System** verwenden.
+- **Reanimated ergänzend** für Animationen, Transitions und Press-Feedback einsetzen.
+- React Native Views nur als **Interaktions-Overlays** oder für einfache Layout-Hüllen nutzen.
+- Bei passenden Aufgaben zuerst den installierten Skia-/Reanimated-Skill **`reanimated-skia-performance`** aktivieren und danach die Implementierung darauf aufbauen.
