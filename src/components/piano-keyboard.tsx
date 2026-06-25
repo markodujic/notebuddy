@@ -41,6 +41,8 @@ const DEFAULT_START_MIDI = 21;
 const DEFAULT_END_MIDI = 108;
 const KEYBOARD_ZOOM_DURATION_MS = 900;
 const VIEWPORT_PADDING = 12;
+/** Real piano white-key ratio: height / width ≈ 6 */
+const KEY_ASPECT_RATIO = 6;
 
 function isBlackMidi(midi: number) {
   return [1, 3, 6, 8, 10].includes(midi % 12);
@@ -89,7 +91,6 @@ export function PianoKeyboard({
 }: PianoKeyboardProps) {
   const { width } = useWindowDimensions();
   const isPortrait = width < 520;
-  const isCompact = width < 420;
   const [viewportWidth, setViewportWidth] = useState(0);
   const isFirstLayout = useRef(true);
 
@@ -103,10 +104,14 @@ export function PianoKeyboard({
     [keyboardKeys],
   );
 
+  // Natural key width — height is derived from the aspect ratio so keys
+  // always have real piano proportions.
   const naturalWhiteKeyWidth = isPortrait ? 16 : 24;
   const whiteKeyCount = Math.max(1, whiteKeys.length);
   const naturalKeyboardWidth = whiteKeyCount * naturalWhiteKeyWidth;
   const keyboardWidth = naturalKeyboardWidth;
+  const pianoHeight = naturalWhiteKeyWidth * KEY_ASPECT_RATIO;
+  const blackKeyHeight = pianoHeight * 0.62;
 
   // Whether a key lies outside the active focus range (→ greyed out)
   const isDimmed = (midi: number) =>
@@ -120,10 +125,8 @@ export function PianoKeyboard({
   const focusScale = Math.min(3, overviewScale * 2.5);
   const detailScale = Math.min(6, overviewScale * 4.5);
 
-  const pianoHeight = isPortrait ? 124 : isCompact ? 132 : 176;
   const keyWidth = naturalWhiteKeyWidth;
   const blackKeyWidth = keyWidth * 0.58;
-  const blackKeyHeight = pianoHeight * 0.62;
 
   // Focus center in natural coordinates (used for pan offset)
   const focusCenter = useMemo(() => {
@@ -154,10 +157,8 @@ export function PianoKeyboard({
     let targetOffset: number;
 
     if (zoomMode === 'overview') {
-      // Center the entire keyboard within the viewport
       targetOffset = (viewportWidth - scaledWidth) / 2;
     } else {
-      // Center the focus point, clamped to avoid empty space on edges
       const rawOffset = viewportWidth / 2 - focusCenter * targetScale;
       const minOffset = Math.min(0, viewportWidth - scaledWidth);
       const maxOffset = Math.max(0, (viewportWidth - scaledWidth) / 2);
@@ -169,8 +170,6 @@ export function PianoKeyboard({
       easing: Easing.bezier(0.42, 0, 0.58, 1),
     };
 
-    // On the very first layout, snap into place without animation to prevent
-    // an initial scale-from-zero flackering.
     if (isFirstLayout.current) {
       isFirstLayout.current = false;
       scaleSv.value = targetScale;
@@ -181,11 +180,16 @@ export function PianoKeyboard({
     }
   }, [targetScale, zoomMode, viewportWidth, keyboardWidth, focusCenter, scaleSv, offsetX]);
 
-  // transformOrigin "left center" makes scale grow from the left edge so
-  // translateX maps 1:1 to the visible offset. We only scale X so the key
-  // height stays constant and always fits the container vertically.
+  // Uniform scale preserves real piano-key proportions at every zoom level.
+  // transformOrigin "left top" anchors at the top-left corner.
   const cameraStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: offsetX.value }, { scaleX: scaleSv.value }, { scaleY: 1 }],
+    transform: [{ translateX: offsetX.value }, { scale: scaleSv.value }],
+  }));
+
+  // The viewport height grows with the scale so the full key height is
+  // always visible — no clipping, proportions stay correct.
+  const viewportStyle = useAnimatedStyle(() => ({
+    height: pianoHeight * scaleSv.value + VIEWPORT_PADDING * 2,
   }));
 
   function handleLayout(e: LayoutChangeEvent) {
@@ -219,10 +223,7 @@ export function PianoKeyboard({
             : 'Detail'}
       </ThemedText>
 
-      <View
-        onLayout={handleLayout}
-        style={[styles.keyboardViewport, { height: pianoHeight + VIEWPORT_PADDING * 2 }]}
-      >
+      <Animated.View onLayout={handleLayout} style={[styles.keyboardViewport, viewportStyle]}>
         <Animated.View
           style={[
             styles.keyboardCamera,
@@ -230,7 +231,7 @@ export function PianoKeyboard({
               width: keyboardWidth,
               height: pianoHeight,
               top: VIEWPORT_PADDING,
-              transformOrigin: 'left center',
+              transformOrigin: 'left top',
             },
             cameraStyle,
           ]}
@@ -311,7 +312,7 @@ export function PianoKeyboard({
             );
           })}
         </Animated.View>
-      </View>
+      </Animated.View>
     </ThemedView>
   );
 }
