@@ -1,5 +1,5 @@
-import { Canvas, Group, Rect } from '@shopify/react-native-skia';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Canvas, Group, Rect, RoundedRect } from '@shopify/react-native-skia';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import {
   LayoutChangeEvent,
   Pressable,
@@ -11,7 +11,7 @@ import Animated, {
   Easing,
   useAnimatedStyle,
   useSharedValue,
-  withTiming,
+  withTiming
 } from 'react-native-reanimated';
 
 import { ThemedText } from '@/components/themed-text';
@@ -80,6 +80,43 @@ function getBlackLeft(visibleWhiteKeys: PianoKey[], keyWidth: number, key: Piano
   const whiteIndex = visibleWhiteKeys.findIndex((white) => white.midi > key.midi) - 1;
   return Math.max(0, whiteIndex) * keyWidth + keyWidth * 0.64;
 }
+
+// ── Memoized hit component (D: performance) ─────────────────────────────
+type KeyHitProps = {
+  left: number;
+  width: number;
+  height: number;
+  zIndex: number;
+  disabled?: boolean;
+  onPress: () => void;
+};
+
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+
+const KeyHit = memo(function KeyHit({ left, width, height, zIndex, disabled, onPress }: KeyHitProps) {
+  const highlight = useSharedValue(0);
+  const animatedStyle = useAnimatedStyle(() => ({
+    left,
+    width,
+    height,
+    zIndex,
+    backgroundColor: `rgba(255,255,255,${highlight.value})`,
+  }));
+
+  return (
+    <AnimatedPressable
+      disabled={disabled}
+      onPress={onPress}
+      onPressIn={() => {
+        highlight.value = withTiming(0.28, { duration: 80 });
+      }}
+      onPressOut={() => {
+        highlight.value = withTiming(0, { duration: 180 });
+      }}
+      style={[styles.hitKey, animatedStyle]}
+    />
+  );
+});
 
 export function PianoKeyboard({
   keys,
@@ -239,18 +276,21 @@ export function PianoKeyboard({
           <Canvas style={{ width: keyboardWidth, height: pianoHeight }}>
             {whiteKeys.map((key, index) => (
               <Group key={key.midi}>
-                <Rect
+                {/* C3: rounded white key */}
+                <RoundedRect
                   x={index * keyWidth}
                   y={0}
                   width={keyWidth}
                   height={pianoHeight}
+                  r={2}
                   color={resolveKeyFill(key, false, isDimmed(key.midi))}
                 />
-                <Rect
+                <RoundedRect
                   x={index * keyWidth}
                   y={0}
                   width={keyWidth}
                   height={pianoHeight}
+                  r={2}
                   color="rgba(0,0,0,0.2)"
                   style="stroke"
                   strokeWidth={1}
@@ -258,56 +298,62 @@ export function PianoKeyboard({
               </Group>
             ))}
 
+            {/* C2: shadow rects beneath black keys */}
             {blackKeys.map((key) => {
               const x = getBlackLeft(whiteKeys, keyWidth, key);
               return (
-                <Group key={key.midi}>
-                  <Rect
-                    x={x}
-                    y={0}
-                    width={blackKeyWidth}
-                    height={blackKeyHeight}
-                    color={resolveKeyFill(key, true, isDimmed(key.midi))}
-                  />
-                </Group>
+                <Rect
+                  key={`${key.midi}-shadow`}
+                  x={x + 1}
+                  y={2}
+                  width={blackKeyWidth}
+                  height={blackKeyHeight}
+                  color="rgba(0,0,0,0.3)"
+                />
+              );
+            })}
+
+            {/* C2+C3: rounded black keys with shadow */}
+            {blackKeys.map((key) => {
+              const x = getBlackLeft(whiteKeys, keyWidth, key);
+              return (
+                <RoundedRect
+                  key={key.midi}
+                  x={x}
+                  y={0}
+                  width={blackKeyWidth}
+                  height={blackKeyHeight}
+                  r={1.5}
+                  color={resolveKeyFill(key, true, isDimmed(key.midi))}
+                />
               );
             })}
           </Canvas>
 
+          {/* C4 + D: memoized hit overlays with animated press highlight */}
           {whiteKeys.map((key, index) => (
-            <Pressable
+            <KeyHit
               key={key.midi}
+              left={index * keyWidth}
+              width={keyWidth}
+              height={pianoHeight}
+              zIndex={3}
               disabled={!interactive}
               onPress={() => onKeyPress?.(key)}
-              style={({ pressed }: { pressed: boolean }) => [
-                styles.hitKey,
-                {
-                  left: index * keyWidth,
-                  width: keyWidth,
-                  height: pianoHeight,
-                },
-                pressed && styles.keyPressed,
-              ]}
             />
           ))}
 
           {blackKeys.map((key) => {
             const x = getBlackLeft(whiteKeys, keyWidth, key);
             return (
-              <Pressable
+              <KeyHit
                 key={key.midi}
+                left={x}
+                width={blackKeyWidth}
+                height={blackKeyHeight}
+                zIndex={4}
                 disabled={!interactive}
                 onPress={() => onKeyPress?.(key)}
-                style={({ pressed }: { pressed: boolean }) => [
-                  styles.hitKey,
-                  {
-                    left: x,
-                    width: blackKeyWidth,
-                    height: blackKeyHeight,
-                  },
-                  styles.blackHitKey,
-                  pressed && styles.keyPressed,
-                ]}
               />
             );
           })}
@@ -360,14 +406,6 @@ const styles = StyleSheet.create({
   hitKey: {
     position: 'absolute',
     top: 0,
-    zIndex: 3,
     backgroundColor: 'transparent',
-  },
-  blackHitKey: {
-    zIndex: 4,
-  },
-  keyPressed: {
-    transform: [{ translateY: 2 }],
-    opacity: 0.9,
   },
 });
