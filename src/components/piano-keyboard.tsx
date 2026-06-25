@@ -182,9 +182,10 @@ export function PianoKeyboard({
   }, [targetScale, zoomMode, viewportWidth, keyboardWidth, focusCenter, scaleSv, offsetX]);
 
   // transformOrigin "left center" makes scale grow from the left edge so
-  // translateX maps 1:1 to the visible offset.
+  // translateX maps 1:1 to the visible offset. We only scale X so the key
+  // height stays constant and always fits the container vertically.
   const cameraStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: offsetX.value }, { scale: scaleSv.value }],
+    transform: [{ translateX: offsetX.value }, { scaleX: scaleSv.value }, { scaleY: 1 }],
   }));
 
   function handleLayout(e: LayoutChangeEvent) {
