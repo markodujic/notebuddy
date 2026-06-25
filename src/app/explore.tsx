@@ -52,14 +52,9 @@ export default function KeyboardModeScreen() {
   const keys = useMemo(() => {
     return buildDemoKeys().map((key) => ({
       ...key,
-      state:
-        key.midi === highlightMidi
-          ? 'current'
-          : zoomMode === 'focus' && key.midi >= 60 && key.midi <= 72
-            ? 'focused'
-            : 'idle',
+      state: key.midi === highlightMidi ? ('current' as const) : ('idle' as const),
     }));
-  }, [highlightMidi, zoomMode]);
+  }, [highlightMidi]);
 
   const focusRange: [number, number] = zoomMode === 'overview' ? [21, 108] : zoomMode === 'focus' ? [48, 72] : [60, 64];
 
@@ -93,19 +88,19 @@ export default function KeyboardModeScreen() {
         </ThemedView>
 
         <ThemedView style={styles.controlsCard}>
-          <ThemedText type="defaultSemiBold">Steuerung</ThemedText>
+          <ThemedText type="smallBold">Steuerung</ThemedText>
           <ThemedText themeColor="textSecondary" style={styles.controlHint}>
             Tippe auf eine Taste, um sie hervorzuheben. Wechsle den Zoomzustand direkt über die Chips.
           </ThemedText>
 
           <Pressable onPress={() => setZoomMode('overview')} style={styles.actionButton}>
-            <ThemedText type="defaultSemiBold">Alle 88 Tasten</ThemedText>
+            <ThemedText type="smallBold">Alle 88 Tasten</ThemedText>
           </Pressable>
           <Pressable onPress={() => setZoomMode('focus')} style={styles.actionButton}>
-            <ThemedText type="defaultSemiBold">Fokusbereich</ThemedText>
+            <ThemedText type="smallBold">Fokusbereich</ThemedText>
           </Pressable>
           <Pressable onPress={() => setZoomMode('detail')} style={styles.actionButton}>
-            <ThemedText type="defaultSemiBold">Detailansicht</ThemedText>
+            <ThemedText type="smallBold">Detailansicht</ThemedText>
           </Pressable>
         </ThemedView>
       </ThemedView>

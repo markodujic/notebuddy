@@ -1,6 +1,12 @@
 import { Canvas, Group, Rect } from '@shopify/react-native-skia';
-import { useEffect, useMemo, useState } from 'react';
-import { LayoutChangeEvent, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  LayoutChangeEvent,
+  Pressable,
+  StyleSheet,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -53,22 +59,19 @@ function makeDefaultKeys(): PianoKey[] {
   return result;
 }
 
-function resolveKeyFill(key: PianoKey, isBlackKey: boolean) {
+function resolveKeyFill(key: PianoKey, isBlackKey: boolean, dimmed: boolean) {
   const state = key.state ?? 'idle';
 
-  if (isBlackKey) {
-    if (state === 'correct') return '#16a34a';
-    if (state === 'wrong') return '#dc2626';
-    if (state === 'current') return '#eab308';
-    if (state === 'focused') return '#a855f7';
-    return '#1f1f28';
-  }
+  // Active feedback states always win, even outside the focus range
+  if (state === 'correct') return isBlackKey ? '#16a34a' : '#22c55e';
+  if (state === 'wrong') return isBlackKey ? '#dc2626' : '#ef4444';
+  if (state === 'current') return isBlackKey ? '#eab308' : '#facc15';
 
-  if (state === 'correct') return '#22c55e';
-  if (state === 'wrong') return '#ef4444';
-  if (state === 'current') return '#facc15';
-  if (state === 'focused') return '#c084fc';
-  return '#f8f7f4';
+  // Keys outside the focus range are greyed out
+  if (dimmed) return isBlackKey ? '#4a4a55' : '#c8c8cc';
+
+  // Normal idle fill
+  return isBlackKey ? '#1f1f28' : '#f8f7f4';
 }
 
 function getBlackLeft(visibleWhiteKeys: PianoKey[], keyWidth: number, key: PianoKey) {
@@ -87,7 +90,8 @@ export function PianoKeyboard({
   const { width } = useWindowDimensions();
   const isPortrait = width < 520;
   const isCompact = width < 420;
-  const [layout, setLayout] = useState({ width: 0, height: 0 });
+  const [viewportWidth, setViewportWidth] = useState(0);
+  const isFirstLayout = useRef(true);
 
   const keyboardKeys = useMemo(() => keys ?? makeDefaultKeys(), [keys]);
   const whiteKeys = useMemo(
@@ -99,24 +103,29 @@ export function PianoKeyboard({
     [keyboardKeys],
   );
 
-  const viewportWidth = layout.width || width;
-  const viewportHeight = layout.height || 0;
-
   const naturalWhiteKeyWidth = isPortrait ? 16 : 24;
   const whiteKeyCount = Math.max(1, whiteKeys.length);
   const naturalKeyboardWidth = whiteKeyCount * naturalWhiteKeyWidth;
-  const overviewScale = Math.min(1, viewportWidth / Math.max(naturalKeyboardWidth, 1));
-  const focusScale = Math.min(2, overviewScale * 2.2);
+  const keyboardWidth = naturalKeyboardWidth;
+
+  // Whether a key lies outside the active focus range (→ greyed out)
+  const isDimmed = (midi: number) =>
+    zoomMode !== 'overview' && focusRange
+      ? !(midi >= focusRange[0] && midi <= focusRange[1])
+      : false;
+
+  // ── Three-stage scale system ──────────────────────────────────────────
+  const overviewScale =
+    viewportWidth > 0 ? Math.min(1, viewportWidth / naturalKeyboardWidth) : 0;
+  const focusScale = Math.min(3, overviewScale * 2.5);
+  const detailScale = Math.min(6, overviewScale * 4.5);
+
   const pianoHeight = isPortrait ? 124 : isCompact ? 132 : 176;
   const keyWidth = naturalWhiteKeyWidth;
   const blackKeyWidth = keyWidth * 0.58;
   const blackKeyHeight = pianoHeight * 0.62;
 
-  const zoomProgress = useSharedValue(zoomMode === 'focus' ? 1 : 0);
-  const focusOffset = useSharedValue(0);
-
-  const keyboardWidth = naturalKeyboardWidth;
-
+  // Focus center in natural coordinates (used for pan offset)
   const focusCenter = useMemo(() => {
     if (!focusRange) return naturalKeyboardWidth / 2;
     const [min, max] = focusRange;
@@ -127,44 +136,65 @@ export function PianoKeyboard({
     return (whiteBefore + Math.max(1, whiteInFocus) / 2) * naturalWhiteKeyWidth;
   }, [focusRange, naturalKeyboardWidth, naturalWhiteKeyWidth, whiteKeys]);
 
+  // Resolve the target scale for the current zoom mode
+  const targetScale =
+    zoomMode === 'detail'
+      ? detailScale
+      : zoomMode === 'focus'
+        ? focusScale
+        : overviewScale;
+
+  const scaleSv = useSharedValue(targetScale);
+  const offsetX = useSharedValue(0);
+
   useEffect(() => {
-    const nextProgress = zoomMode === 'focus' ? 1 : 0;
-    zoomProgress.value = withTiming(nextProgress, {
+    if (viewportWidth <= 0) return;
+
+    const scaledWidth = keyboardWidth * targetScale;
+    let targetOffset: number;
+
+    if (zoomMode === 'overview') {
+      // Center the entire keyboard within the viewport
+      targetOffset = (viewportWidth - scaledWidth) / 2;
+    } else {
+      // Center the focus point, clamped to avoid empty space on edges
+      const rawOffset = viewportWidth / 2 - focusCenter * targetScale;
+      const minOffset = Math.min(0, viewportWidth - scaledWidth);
+      const maxOffset = Math.max(0, (viewportWidth - scaledWidth) / 2);
+      targetOffset = Math.max(minOffset, Math.min(maxOffset, rawOffset));
+    }
+
+    const animationConfig = {
       duration: KEYBOARD_ZOOM_DURATION_MS,
       easing: Easing.bezier(0.42, 0, 0.58, 1),
-    });
-
-    const centeredOffset = viewportWidth / 2 - focusCenter * focusScale;
-    const scaledKeyboardWidth = keyboardWidth * focusScale;
-    const minOffset = Math.min(0, viewportWidth - scaledKeyboardWidth);
-    const maxOffset = 0;
-    const clampedOffset = Math.max(minOffset, Math.min(maxOffset, centeredOffset));
-
-    focusOffset.value = withTiming(zoomMode === 'focus' ? clampedOffset : 0, {
-      duration: KEYBOARD_ZOOM_DURATION_MS,
-      easing: Easing.bezier(0.42, 0, 0.58, 1),
-    });
-  }, [focusCenter, keyboardWidth, viewportWidth, zoomMode, focusOffset, zoomProgress]);
-
-  const cameraStyle = useAnimatedStyle(() => {
-    const scale = overviewScale + zoomProgress.value * (focusScale - overviewScale);
-    const centerShift = (viewportWidth - keyboardWidth * scale) / 2;
-    return {
-      transform: [{ translateX: centerShift + focusOffset.value }, { scale }],
     };
-  });
+
+    // On the very first layout, snap into place without animation to prevent
+    // an initial scale-from-zero flackering.
+    if (isFirstLayout.current) {
+      isFirstLayout.current = false;
+      scaleSv.value = targetScale;
+      offsetX.value = targetOffset;
+    } else {
+      scaleSv.value = withTiming(targetScale, animationConfig);
+      offsetX.value = withTiming(targetOffset, animationConfig);
+    }
+  }, [targetScale, zoomMode, viewportWidth, keyboardWidth, focusCenter, scaleSv, offsetX]);
+
+  // transformOrigin "left center" makes scale grow from the left edge so
+  // translateX maps 1:1 to the visible offset.
+  const cameraStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: offsetX.value }, { scale: scaleSv.value }],
+  }));
 
   function handleLayout(e: LayoutChangeEvent) {
-    setLayout({
-      width: e.nativeEvent.layout.width,
-      height: e.nativeEvent.layout.height,
-    });
+    setViewportWidth(e.nativeEvent.layout.width);
   }
 
   return (
     <ThemedView style={styles.shell}>
       <View style={styles.headerRow}>
-        <ThemedText type="defaultSemiBold">Klaviatur</ThemedText>
+        <ThemedText type="smallBold">Klaviatur</ThemedText>
         <View style={styles.zoomRow}>
           {(['overview', 'focus', 'detail'] as const).map((mode) => (
             <Pressable
@@ -181,23 +211,26 @@ export function PianoKeyboard({
       </View>
 
       <ThemedText type="small" style={styles.focusLabel}>
-        {zoomMode === 'overview' ? '88 Tasten' : zoomMode === 'focus' ? 'Fokusbereich' : 'Detail'}
+        {zoomMode === 'overview'
+          ? '88 Tasten'
+          : zoomMode === 'focus'
+            ? 'Fokusbereich'
+            : 'Detail'}
       </ThemedText>
 
       <View
         onLayout={handleLayout}
-        style={[
-          styles.keyboardViewport,
-          {
-            height: Math.max(pianoHeight + VIEWPORT_PADDING * 2, viewportHeight || pianoHeight),
-            paddingHorizontal: VIEWPORT_PADDING,
-          },
-        ]}
+        style={[styles.keyboardViewport, { height: pianoHeight + VIEWPORT_PADDING * 2 }]}
       >
         <Animated.View
           style={[
             styles.keyboardCamera,
-            { width: keyboardWidth, height: pianoHeight },
+            {
+              width: keyboardWidth,
+              height: pianoHeight,
+              top: VIEWPORT_PADDING,
+              transformOrigin: 'left center',
+            },
             cameraStyle,
           ]}
         >
@@ -209,7 +242,7 @@ export function PianoKeyboard({
                   y={0}
                   width={keyWidth}
                   height={pianoHeight}
-                  color={resolveKeyFill(key, false)}
+                  color={resolveKeyFill(key, false, isDimmed(key.midi))}
                 />
                 <Rect
                   x={index * keyWidth}
@@ -232,7 +265,7 @@ export function PianoKeyboard({
                     y={0}
                     width={blackKeyWidth}
                     height={blackKeyHeight}
-                    color={resolveKeyFill(key, true)}
+                    color={resolveKeyFill(key, true, isDimmed(key.midi))}
                   />
                 </Group>
               );
@@ -312,14 +345,15 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   keyboardViewport: {
+    position: 'relative',
     overflow: 'hidden',
     borderRadius: 24,
     width: '100%',
     alignSelf: 'stretch',
-    justifyContent: 'center',
   },
   keyboardCamera: {
-    position: 'relative',
+    position: 'absolute',
+    left: 0,
   },
   hitKey: {
     position: 'absolute',
