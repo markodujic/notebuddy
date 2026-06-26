@@ -26,3 +26,6 @@ Ziel ist, dass Audio und UI jeweils mit maximaler Performance und möglichst wen
 - **Reanimated ergänzend** für Animationen, Transitions und Press-Feedback einsetzen.
 - React Native Views nur als **Interaktions-Overlays** oder für einfache Layout-Hüllen nutzen.
 - Bei passenden Aufgaben zuerst den installierten Skia-/Reanimated-Skill **`reanimated-skia-performance`** aktivieren und danach die Implementierung darauf aufbauen.
+
+## Dev-Build Pflicht
+Änderungen an nativen Konfigurationen (app.json, Info.plist, AndroidManifest, Permissions, neue native Dependencies) erfordern immer einen **neuen Dev-Build**. JS-only Änderungen reichen für ein OTA-Update, native Änderungen müssen neu gebaut werden. Der Agent muss den User aktiv informieren, wenn ein neuer Build nötig ist.
