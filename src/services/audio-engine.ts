@@ -9,7 +9,11 @@
  *   AudioStream (PCM) → RMS-Gate → PitchDetector → Callback
  */
 
-import { requestRecordingPermissionsAsync, useAudioStream } from 'expo-audio';
+import {
+  requestRecordingPermissionsAsync,
+  setAudioModeAsync,
+  useAudioStream,
+} from 'expo-audio';
 import { useCallback, useEffect, useRef } from 'react';
 
 import {
@@ -59,14 +63,24 @@ export function useAudioEngine(
 
   // Buffer-Verarbeitung als useRef (wird erst beim ersten Buffer aufgerufen)
   const processBufferRef = useRef<
-    ((audioBuffer: { data: ArrayBuffer; sampleRate: number; channels: number; timestamp: number }) => void) | null
+    ((audioBuffer: {
+      data: ArrayBuffer;
+      sampleRate: number;
+      channels: number;
+      timestamp: number;
+    }) => void) | null
   >(null);
 
   /**
    * Verarbeitet einen rohen PCM-Buffer: RMS → Pitch-Detection → Callback.
    */
   const processBuffer = useCallback(
-    (audioBuffer: { data: ArrayBuffer; sampleRate: number; channels: number; timestamp: number }) => {
+    (audioBuffer: {
+      data: ArrayBuffer;
+      sampleRate: number;
+      channels: number;
+      timestamp: number;
+    }) => {
       try {
         const { data, sampleRate, timestamp } = audioBuffer;
         sampleRateRef.current = sampleRate;
@@ -122,8 +136,6 @@ export function useAudioEngine(
   processBufferRef.current = processBuffer;
 
   // Audio-Stream erstellen (sampleRate 44100, mono, float32)
-  // WICHTIG: onBuffer ruft processBufferRef.current auf (nicht processBuffer direkt),
-  // um Forward-Reference-Probleme zu vermeiden.
   const { stream } = useAudioStream({
     sampleRate: 44100,
     channels: 1,
@@ -134,7 +146,7 @@ export function useAudioEngine(
   });
 
   /**
-   * Fordert Mikrofon-Berechtigung an und startet den Stream.
+   * Fordert Mikrofon-Berechtigung an, konfiguriert Audio-Modus und startet den Stream.
    */
   const startListening = useCallback(async () => {
     if (!stream) {
@@ -145,7 +157,7 @@ export function useAudioEngine(
     try {
       statusRef.current = 'requesting';
 
-      // Berechtigung anfordern
+      // 1. Berechtigung anfordern
       const permission = await requestRecordingPermissionsAsync();
       if (!permission.granted) {
         statusRef.current = 'error';
@@ -153,7 +165,15 @@ export function useAudioEngine(
         return;
       }
 
-      // Stream starten
+      // 2. Audio-Modus konfigurieren (wichtig für Mikrofonaufnahme!)
+      // Ohne diesen Schritt funktioniert die Aufnahme auf iOS/Android nicht.
+      await setAudioModeAsync({
+        playsInSilentMode: true,
+        shouldPlayInBackground: false,
+        interruptionMode: 'mixWithOthers',
+      });
+
+      // 3. Stream starten
       statusRef.current = 'streaming';
       volumeEmaRef.current = 0;
       await stream.start();
