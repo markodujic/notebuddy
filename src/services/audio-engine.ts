@@ -61,42 +61,16 @@ export function useAudioEngine(
     onErrorRef.current = onError;
   }, [onError]);
 
-  // Buffer-Verarbeitung als useRef (wird erst beim ersten Buffer aufgerufen)
-  const processBufferRef = useRef<
-    ((audioBuffer: {
-      data: ArrayBuffer;
-      sampleRate: number;
-      channels: number;
-      timestamp: number;
-    }) => void) | null
-  >(null);
-
-  /**
-   * Verarbeitet einen rohen PCM-Buffer: RMS → Pitch-Detection → Callback.
-   */
+  // Buffer-Verarbeitung
   const processBuffer = useCallback(
-    (audioBuffer: {
-      data: ArrayBuffer;
-      sampleRate: number;
-      channels: number;
-      timestamp: number;
-    }) => {
+    (data: ArrayBuffer, sampleRate: number, timestamp: number) => {
       try {
-        const { data, sampleRate, timestamp } = audioBuffer;
         sampleRateRef.current = sampleRate;
-
-        // Float32Array aus ArrayBuffer erstellen
         const samples = new Float32Array(data);
-
-        // RMS berechnen (Lautstärke / Rauschfilter)
         const rms = calculateRMS(samples);
-
-        // Volume EMA-Smoothing
         volumeEmaRef.current = emaSmooth(volumeEmaRef.current, rms, VOLUME_EMA_FACTOR);
 
-        // RMS-Gate: zu leise Signale ignorieren
         if (rms < RMS_GATE_THRESHOLD) {
-          // Stille-Frame emitten
           onFrameRef.current({
             frequency: 0,
             clarity: 0,
@@ -106,15 +80,11 @@ export function useAudioEngine(
           return;
         }
 
-        // Pitch-Detector erstellen (falls noch nicht vorhanden oder sampleRate geändert)
         if (!detectorRef.current) {
           detectorRef.current = new MacLeodPitchDetector(DEFAULT_BUFFER_SIZE, sampleRate);
         }
 
-        // Pitch erkennen
         const result = detectorRef.current.getPitch(samples);
-
-        // Clarity-Gate
         const passesGate = result.clarity >= CLARITY_THRESHOLD;
 
         onFrameRef.current({
@@ -124,7 +94,6 @@ export function useAudioEngine(
           timestamp: timestamp * 1000,
         });
       } catch (err) {
-        // Fehler beim Buffer-Verarbeiten abfangen (nicht crashen)
         const error = err instanceof Error ? err : new Error(String(err));
         onErrorRef.current?.(error);
       }
@@ -132,23 +101,34 @@ export function useAudioEngine(
     [],
   );
 
-  // processBuffer in Ref halten, damit der onBuffer-Callback darauf zugreifen kann
-  processBufferRef.current = processBuffer;
-
-  // Audio-Stream erstellen (sampleRate 44100, mono, float32)
+  // Audio-Stream erstellen (ohne onBuffer im options-Objekt)
+  // Wir registrieren den Listener stattdessen direkt auf dem Stream-Objekt,
+  // weil die onBuffer-Option bei SharedObjects nicht zuverlässig funktioniert.
   const { stream } = useAudioStream({
     sampleRate: 44100,
     channels: 1,
     encoding: 'float32',
-    onBuffer: (audioBuffer) => {
-      processBufferRef.current?.(audioBuffer);
-    },
   });
+
+  // Event-Listener direkt auf dem Stream-Objekt registrieren
+  // AudioStream ist ein SharedObject, das 'audioStreamBuffer' Events emittiert.
+  useEffect(() => {
+    if (!stream) return;
+
+    const subscription = stream.addListener('audioStreamBuffer', (buffer: { data: ArrayBuffer; sampleRate: number; channels: number; timestamp: number }) => {
+      processBuffer(buffer.data, buffer.sampleRate, buffer.timestamp);
+    });
+
+    return () => {
+      subscription?.remove();
+    };
+  }, [stream, processBuffer]);
 
   /**
    * Fordert Mikrofon-Berechtigung an, konfiguriert Audio-Modus und startet den Stream.
    */
   const startListening = useCallback(async () => {
+    console.log('[AudioEngine] startListening called, stream:', !!stream);
     if (!stream) {
       onErrorRef.current?.(new Error('Audio-Stream nicht verfügbar'));
       return;
@@ -159,6 +139,7 @@ export function useAudioEngine(
 
       // 1. Berechtigung anfordern
       const permission = await requestRecordingPermissionsAsync();
+      console.log('[AudioEngine] Permission granted:', permission.granted);
       if (!permission.granted) {
         statusRef.current = 'error';
         onErrorRef.current?.(new Error('Mikrofon-Berechtigung verweigert'));
@@ -166,7 +147,6 @@ export function useAudioEngine(
       }
 
       // 2. Audio-Modus konfigurieren (wichtig für Mikrofonaufnahme!)
-      // Ohne diesen Schritt funktioniert die Aufnahme auf iOS/Android nicht.
       await setAudioModeAsync({
         playsInSilentMode: true,
         shouldPlayInBackground: false,
@@ -176,9 +156,12 @@ export function useAudioEngine(
       // 3. Stream starten
       statusRef.current = 'streaming';
       volumeEmaRef.current = 0;
+      console.log('[AudioEngine] Starting stream...');
       await stream.start();
+      console.log('[AudioEngine] Stream started, isStreaming:', stream.isStreaming);
     } catch (err) {
       statusRef.current = 'error';
+      console.error('[AudioEngine] ERROR:', err);
       const error = err instanceof Error ? err : new Error(String(err));
       onErrorRef.current?.(error);
     }
@@ -200,7 +183,7 @@ export function useAudioEngine(
   }, [stream]);
 
   /**
-   * Setzt den Pitch-Detector zurück (z.B. für Silence-Gate).
+   * Setzt den Pitch-Detector zurück.
    */
   const resetDetector = useCallback(() => {
     detectorRef.current = null;
@@ -221,13 +204,9 @@ export function useAudioEngine(
   }, [stream]);
 
   return {
-    /** Startet die Audio-Aufnahme + Pitch-Detection. */
     startListening,
-    /** Stoppt die Audio-Aufnahme. */
     stopListening,
-    /** Setzt den Detector zurück. */
     resetDetector,
-    /** Ist der Stream aktiv? */
     isStreaming: stream?.isStreaming ?? false,
   };
 }
