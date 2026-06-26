@@ -38,22 +38,17 @@ export type AudioEngineErrorCallback = (error: Error) => void;
  *
  * Audio-Verarbeitung läuft vollständig in Refs – kein Re-Render pro Frame.
  * Ergebnisse werden nur über den `onFrame`-Callback geliefert.
- *
- * @param onFrame Callback für jeden Pitch-Frame.
- * @param onError Optionaler Fehler-Callback.
  */
 export function useAudioEngine(
   onFrame: AudioEngineCallback,
   onError?: AudioEngineErrorCallback,
 ) {
-  const statusRef = useRef<AudioEngineStatus>('idle');
   const detectorRef = useRef<MacLeodPitchDetector | null>(null);
   const volumeEmaRef = useRef(0);
   const onFrameRef = useRef(onFrame);
   const onErrorRef = useRef(onError);
   const sampleRateRef = useRef(44100);
 
-  // Callbacks in Refs halten, damit der Audio-Stream nicht re-startet
   useEffect(() => {
     onFrameRef.current = onFrame;
   }, [onFrame]);
@@ -61,7 +56,9 @@ export function useAudioEngine(
     onErrorRef.current = onError;
   }, [onError]);
 
-  // Buffer-Verarbeitung
+  /**
+   * Verarbeitet einen rohen PCM-Buffer: RMS → Pitch-Detection → Callback.
+   */
   const processBuffer = useCallback(
     (data: ArrayBuffer, sampleRate: number, timestamp: number) => {
       try {
@@ -101,66 +98,51 @@ export function useAudioEngine(
     [],
   );
 
-  // Audio-Stream erstellen (ohne onBuffer im options-Objekt)
-  // Wir registrieren den Listener stattdessen direkt auf dem Stream-Objekt,
-  // weil die onBuffer-Option bei SharedObjects nicht zuverlässig funktioniert.
+  // Audio-Stream erstellen mit onBuffer Callback
   const { stream } = useAudioStream({
     sampleRate: 44100,
     channels: 1,
     encoding: 'float32',
-  });
-
-  // Event-Listener direkt auf dem Stream-Objekt registrieren
-  // AudioStream ist ein SharedObject, das 'audioStreamBuffer' Events emittiert.
-  useEffect(() => {
-    if (!stream) return;
-
-    const subscription = stream.addListener('audioStreamBuffer', (buffer: { data: ArrayBuffer; sampleRate: number; channels: number; timestamp: number }) => {
+    onBuffer: (buffer) => {
+      console.log('[AudioEngine] Buffer received:', buffer.data.byteLength, 'bytes');
       processBuffer(buffer.data, buffer.sampleRate, buffer.timestamp);
-    });
-
-    return () => {
-      subscription?.remove();
-    };
-  }, [stream, processBuffer]);
+    },
+  });
 
   /**
    * Fordert Mikrofon-Berechtigung an, konfiguriert Audio-Modus und startet den Stream.
    */
   const startListening = useCallback(async () => {
-    console.log('[AudioEngine] startListening called, stream:', !!stream);
+    console.log('[AudioEngine] startListening, stream:', !!stream);
     if (!stream) {
       onErrorRef.current?.(new Error('Audio-Stream nicht verfügbar'));
       return;
     }
 
     try {
-      statusRef.current = 'requesting';
-
       // 1. Berechtigung anfordern
       const permission = await requestRecordingPermissionsAsync();
       console.log('[AudioEngine] Permission granted:', permission.granted);
       if (!permission.granted) {
-        statusRef.current = 'error';
         onErrorRef.current?.(new Error('Mikrofon-Berechtigung verweigert'));
         return;
       }
 
-      // 2. Audio-Modus konfigurieren (wichtig für Mikrofonaufnahme!)
+      // 2. Audio-Modus konfigurieren
+      // WICHTIG: allowsRecordingIOS muss true sein für iOS-Aufnahme!
       await setAudioModeAsync({
+        allowsRecording: true,
         playsInSilentMode: true,
         shouldPlayInBackground: false,
-        interruptionMode: 'mixWithOthers',
+        interruptionMode: 'duckOthers',
       });
+      console.log('[AudioEngine] Audio mode set');
 
       // 3. Stream starten
-      statusRef.current = 'streaming';
       volumeEmaRef.current = 0;
-      console.log('[AudioEngine] Starting stream...');
       await stream.start();
       console.log('[AudioEngine] Stream started, isStreaming:', stream.isStreaming);
     } catch (err) {
-      statusRef.current = 'error';
       console.error('[AudioEngine] ERROR:', err);
       const error = err instanceof Error ? err : new Error(String(err));
       onErrorRef.current?.(error);
@@ -178,7 +160,6 @@ export function useAudioEngine(
     } catch {
       // Ignorieren
     }
-    statusRef.current = 'idle';
     volumeEmaRef.current = 0;
   }, [stream]);
 
