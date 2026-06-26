@@ -1,25 +1,30 @@
-import { Canvas, Group, Rect, RoundedRect } from '@shopify/react-native-skia';
-import { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { Canvas, Group, Rect, RoundedRect } from "@shopify/react-native-skia";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import {
   LayoutChangeEvent,
   Pressable,
   StyleSheet,
   useWindowDimensions,
   View,
-} from 'react-native';
+} from "react-native";
 import Animated, {
   Easing,
   useAnimatedStyle,
   useSharedValue,
-  withTiming
-} from 'react-native-reanimated';
+  withTiming,
+} from "react-native-reanimated";
 
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Spacing } from '@/constants/theme';
+import { ThemedText } from "@/components/themed-text";
+import { ThemedView } from "@/components/themed-view";
+import { Spacing } from "@/constants/theme";
 
-export type KeyboardZoomMode = 'overview' | 'focus' | 'detail';
-export type KeyboardKeyState = 'idle' | 'current' | 'focused' | 'correct' | 'wrong';
+export type KeyboardZoomMode = "overview" | "focus" | "detail";
+export type KeyboardKeyState =
+  | "idle"
+  | "current"
+  | "focused"
+  | "correct"
+  | "wrong";
 
 export type PianoKey = {
   midi: number;
@@ -55,29 +60,34 @@ function makeDefaultKeys(): PianoKey[] {
       midi,
       note: `M${midi}`,
       isBlack: isBlackMidi(midi),
-      state: 'idle',
+      state: "idle",
     });
   }
   return result;
 }
 
 function resolveKeyFill(key: PianoKey, isBlackKey: boolean, dimmed: boolean) {
-  const state = key.state ?? 'idle';
+  const state = key.state ?? "idle";
 
   // Active feedback states always win, even outside the focus range
-  if (state === 'correct') return isBlackKey ? '#16a34a' : '#22c55e';
-  if (state === 'wrong') return isBlackKey ? '#dc2626' : '#ef4444';
-  if (state === 'current') return isBlackKey ? '#eab308' : '#facc15';
+  if (state === "correct") return isBlackKey ? "#16a34a" : "#22c55e";
+  if (state === "wrong") return isBlackKey ? "#dc2626" : "#ef4444";
+  if (state === "current") return isBlackKey ? "#eab308" : "#facc15";
 
   // Keys outside the focus range are greyed out
-  if (dimmed) return isBlackKey ? '#4a4a55' : '#c8c8cc';
+  if (dimmed) return isBlackKey ? "#4a4a55" : "#c8c8cc";
 
   // Normal idle fill
-  return isBlackKey ? '#1f1f28' : '#f8f7f4';
+  return isBlackKey ? "#1f1f28" : "#f8f7f4";
 }
 
-function getBlackLeft(visibleWhiteKeys: PianoKey[], keyWidth: number, key: PianoKey) {
-  const whiteIndex = visibleWhiteKeys.findIndex((white) => white.midi > key.midi) - 1;
+function getBlackLeft(
+  visibleWhiteKeys: PianoKey[],
+  keyWidth: number,
+  key: PianoKey,
+) {
+  const whiteIndex =
+    visibleWhiteKeys.findIndex((white) => white.midi > key.midi) - 1;
   return Math.max(0, whiteIndex) * keyWidth + keyWidth * 0.64;
 }
 
@@ -93,7 +103,14 @@ type KeyHitProps = {
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
-const KeyHit = memo(function KeyHit({ left, width, height, zIndex, disabled, onPress }: KeyHitProps) {
+const KeyHit = memo(function KeyHit({
+  left,
+  width,
+  height,
+  zIndex,
+  disabled,
+  onPress,
+}: KeyHitProps) {
   const highlight = useSharedValue(0);
   const animatedStyle = useAnimatedStyle(() => ({
     left,
@@ -121,7 +138,7 @@ const KeyHit = memo(function KeyHit({ left, width, height, zIndex, disabled, onP
 export function PianoKeyboard({
   keys,
   focusRange,
-  zoomMode = 'overview',
+  zoomMode = "overview",
   interactive = true,
   onKeyPress,
   onZoomModeChange,
@@ -152,7 +169,7 @@ export function PianoKeyboard({
 
   // Whether a key lies outside the active focus range (→ greyed out)
   const isDimmed = (midi: number) =>
-    zoomMode !== 'overview' && focusRange
+    zoomMode !== "overview" && focusRange
       ? !(midi >= focusRange[0] && midi <= focusRange[1])
       : false;
 
@@ -178,9 +195,9 @@ export function PianoKeyboard({
 
   // Resolve the target scale for the current zoom mode
   const targetScale =
-    zoomMode === 'detail'
+    zoomMode === "detail"
       ? detailScale
-      : zoomMode === 'focus'
+      : zoomMode === "focus"
         ? focusScale
         : overviewScale;
 
@@ -193,7 +210,7 @@ export function PianoKeyboard({
     const scaledWidth = keyboardWidth * targetScale;
     let targetOffset: number;
 
-    if (zoomMode === 'overview') {
+    if (zoomMode === "overview") {
       targetOffset = (viewportWidth - scaledWidth) / 2;
     } else {
       const rawOffset = viewportWidth / 2 - focusCenter * targetScale;
@@ -215,7 +232,15 @@ export function PianoKeyboard({
       scaleSv.value = withTiming(targetScale, animationConfig);
       offsetX.value = withTiming(targetOffset, animationConfig);
     }
-  }, [targetScale, zoomMode, viewportWidth, keyboardWidth, focusCenter, scaleSv, offsetX]);
+  }, [
+    targetScale,
+    zoomMode,
+    viewportWidth,
+    keyboardWidth,
+    focusCenter,
+    scaleSv,
+    offsetX,
+  ]);
 
   // Uniform scale preserves real piano-key proportions at every zoom level.
   // transformOrigin "left top" anchors at the top-left corner.
@@ -237,30 +262,19 @@ export function PianoKeyboard({
     <ThemedView style={styles.shell}>
       <View style={styles.headerRow}>
         <ThemedText type="smallBold">Klaviatur</ThemedText>
-        <View style={styles.zoomRow}>
-          {(['overview', 'focus', 'detail'] as const).map((mode) => (
-            <Pressable
-              key={mode}
-              onPress={() => onZoomModeChange?.(mode)}
-              style={[styles.zoomChip, zoomMode === mode && styles.zoomChipActive]}
-            >
-              <ThemedText type="small" style={styles.zoomChipText}>
-                {mode === 'overview' ? 'Alle' : mode === 'focus' ? 'Fokus' : 'Detail'}
-              </ThemedText>
-            </Pressable>
-          ))}
-        </View>
+        <ThemedText type="small" style={styles.focusLabel}>
+          {zoomMode === "overview"
+            ? "88 Tasten"
+            : zoomMode === "focus"
+              ? "Fokusbereich"
+              : "Detail"}
+        </ThemedText>
       </View>
 
-      <ThemedText type="small" style={styles.focusLabel}>
-        {zoomMode === 'overview'
-          ? '88 Tasten'
-          : zoomMode === 'focus'
-            ? 'Fokusbereich'
-            : 'Detail'}
-      </ThemedText>
-
-      <Animated.View onLayout={handleLayout} style={[styles.keyboardViewport, viewportStyle]}>
+      <Animated.View
+        onLayout={handleLayout}
+        style={[styles.keyboardViewport, viewportStyle]}
+      >
         <Animated.View
           style={[
             styles.keyboardCamera,
@@ -268,7 +282,7 @@ export function PianoKeyboard({
               width: keyboardWidth,
               height: pianoHeight,
               top: VIEWPORT_PADDING,
-              transformOrigin: 'left top',
+              transformOrigin: "left top",
             },
             cameraStyle,
           ]}
@@ -368,44 +382,29 @@ const styles = StyleSheet.create({
     gap: Spacing.two,
   },
   headerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     gap: Spacing.two,
-  },
-  zoomRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  zoomChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    backgroundColor: 'rgba(128,128,128,0.12)',
-  },
-  zoomChipActive: {
-    backgroundColor: 'rgba(124,58,237,0.24)',
-  },
-  zoomChipText: {
-    opacity: 0.9,
+    paddingHorizontal: Spacing.two,
   },
   focusLabel: {
     opacity: 0.7,
   },
   keyboardViewport: {
-    position: 'relative',
-    overflow: 'hidden',
+    position: "relative",
+    overflow: "hidden",
     borderRadius: 24,
-    width: '100%',
-    alignSelf: 'stretch',
+    width: "100%",
+    alignSelf: "stretch",
   },
   keyboardCamera: {
-    position: 'absolute',
+    position: "absolute",
     left: 0,
   },
   hitKey: {
-    position: 'absolute',
+    position: "absolute",
     top: 0,
-    backgroundColor: 'transparent',
+    backgroundColor: "transparent",
   },
 });

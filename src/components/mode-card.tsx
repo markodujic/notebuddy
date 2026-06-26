@@ -1,7 +1,7 @@
-import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
 
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
+import { ThemedText } from "@/components/themed-text";
+import { ThemedView } from "@/components/themed-view";
 
 type ModeCardProps = {
   title: string;
@@ -11,23 +11,50 @@ type ModeCardProps = {
   onPress?: () => void;
 };
 
-export function ModeCard({ title, description, icon, accent, onPress }: ModeCardProps) {
+export function ModeCard({
+  title,
+  description,
+  icon,
+  accent,
+  onPress,
+}: ModeCardProps) {
   const { width } = useWindowDimensions();
   const compact = width < 380;
 
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.pressable, pressed && styles.pressed]}>
-      <ThemedView style={[styles.card, compact && styles.cardCompact, { borderColor: accent }]}> 
-        <View style={[styles.iconBubble, compact && styles.iconBubbleCompact, { backgroundColor: accent }]}>
-          <ThemedText type="defaultSemiBold" style={styles.icon}>
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [styles.pressable, pressed && styles.pressed]}
+    >
+      <ThemedView
+        style={[
+          styles.card,
+          compact && styles.cardCompact,
+          { borderColor: accent },
+        ]}
+      >
+        <View
+          style={[
+            styles.iconBubble,
+            compact && styles.iconBubbleCompact,
+            { backgroundColor: accent },
+          ]}
+        >
+          <ThemedText type="smallBold" style={styles.icon}>
             {icon}
           </ThemedText>
         </View>
         <View style={styles.textWrap}>
-          <ThemedText type="subtitle" style={[styles.title, compact && styles.titleCompact]}>
+          <ThemedText
+            type="subtitle"
+            style={[styles.title, compact && styles.titleCompact]}
+          >
             {title}
           </ThemedText>
-          <ThemedText type="default" style={[styles.description, compact && styles.descriptionCompact]}>
+          <ThemedText
+            type="default"
+            style={[styles.description, compact && styles.descriptionCompact]}
+          >
             {description}
           </ThemedText>
         </View>
@@ -38,15 +65,15 @@ export function ModeCard({ title, description, icon, accent, onPress }: ModeCard
 
 const styles = StyleSheet.create({
   pressable: {
-    width: '100%',
+    width: "100%",
   },
   pressed: {
     transform: [{ scale: 0.985 }],
     opacity: 0.92,
   },
   card: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 16,
     padding: 18,
     borderRadius: 24,
@@ -62,8 +89,8 @@ const styles = StyleSheet.create({
     width: 54,
     height: 54,
     borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   iconBubbleCompact: {
     width: 46,
@@ -71,7 +98,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
   },
   icon: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 22,
   },
   textWrap: {

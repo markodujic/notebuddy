@@ -1,12 +1,21 @@
-import { useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, useWindowDimensions } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useMemo, useState } from "react";
+import {
+  ScrollView,
+  StyleSheet,
+  useWindowDimensions
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { PianoKeyboard, type KeyboardZoomMode, type PianoKey } from '@/components/piano-keyboard';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
+import {
+  PianoKeyboard,
+  type KeyboardZoomMode,
+  type PianoKey,
+} from "@/components/piano-keyboard";
+import { SegmentedControl, type Segment } from "@/components/segmented-control";
+import { ThemedText } from "@/components/themed-text";
+import { ThemedView } from "@/components/themed-view";
+import { BottomTabInset, MaxContentWidth, Spacing } from "@/constants/theme";
+import { useTheme } from "@/hooks/use-theme";
 
 function buildDemoKeys() {
   const keys: PianoKey[] = [];
@@ -18,17 +27,23 @@ function buildDemoKeys() {
       midi,
       note,
       isBlack,
-      state: 'idle',
+      state: "idle",
     });
   }
   return keys;
 }
 
+const zoomSegments: Segment<KeyboardZoomMode>[] = [
+  { label: "Alle", value: "overview" },
+  { label: "Fokus", value: "focus" },
+  { label: "Detail", value: "detail" },
+];
+
 export default function KeyboardModeScreen() {
   const theme = useTheme();
   const safeAreaInsets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
-  const [zoomMode, setZoomMode] = useState<KeyboardZoomMode>('overview');
+  const [zoomMode, setZoomMode] = useState<KeyboardZoomMode>("overview");
   const [highlightMidi, setHighlightMidi] = useState<number | null>(64);
 
   const insets = {
@@ -39,13 +54,20 @@ export default function KeyboardModeScreen() {
   const keys = useMemo(() => {
     return buildDemoKeys().map((key) => ({
       ...key,
-      state: key.midi === highlightMidi ? ('current' as const) : ('idle' as const),
+      state:
+        key.midi === highlightMidi ? ("current" as const) : ("idle" as const),
     }));
   }, [highlightMidi]);
 
-  const focusRange: [number, number] = zoomMode === 'overview' ? [21, 108] : zoomMode === 'focus' ? [48, 72] : [60, 64];
+  const focusRange: [number, number] =
+    zoomMode === "overview"
+      ? [21, 108]
+      : zoomMode === "focus"
+        ? [48, 72]
+        : [60, 64];
 
-  const title = width < 420 ? 'Keyboard' : 'Klaviatur-Modus';
+  const isCompact = width < 420;
+  const title = isCompact ? "Keyboard" : "Klaviatur-Modus";
 
   return (
     <ScrollView
@@ -59,15 +81,18 @@ export default function KeyboardModeScreen() {
           paddingRight: insets.right,
           paddingBottom: insets.bottom,
         },
-      ]}>
+      ]}
+    >
       <ThemedView style={styles.container}>
+        {/* Kompakter Header */}
         <ThemedView style={styles.titleContainer}>
           <ThemedText type="subtitle">{title}</ThemedText>
-          <ThemedText style={styles.centerText} themeColor="textSecondary">
-            Drückbare Klaviatur mit Farbzuständen und steuerbarem Zoom für mobile Nutzung.
+          <ThemedText themeColor="textSecondary" style={styles.subtitleText}>
+            Drückbare Klaviatur mit Farbzuständen und steuerbarem Zoom.
           </ThemedText>
         </ThemedView>
 
+        {/* Klaviatur — bekommt maximalen Raum */}
         <ThemedView style={styles.keyboardCard}>
           <PianoKeyboard
             keys={keys}
@@ -77,26 +102,27 @@ export default function KeyboardModeScreen() {
             onZoomModeChange={setZoomMode}
             onKeyPress={(key) => {
               setHighlightMidi(key.midi);
-              setZoomMode(key.isBlack ? 'detail' : 'focus');
+              setZoomMode(key.isBlack ? "detail" : "focus");
             }}
           />
         </ThemedView>
 
-        <ThemedView style={styles.controlsCard}>
-          <ThemedText type="smallBold">Steuerung</ThemedText>
-          <ThemedText themeColor="textSecondary" style={styles.controlHint}>
-            Tippe auf eine Taste, um sie hervorzuheben. Wechsle den Zoomzustand direkt über die Chips.
+        {/* Steuerleiste — Segmented Control + kompakter Hinweis */}
+        <ThemedView style={styles.controlBar}>
+          <SegmentedControl
+            segments={zoomSegments}
+            value={zoomMode}
+            onValueChange={setZoomMode}
+            accessibilityLabel="Zoom-Modus der Klaviatur"
+          />
+          <ThemedText
+            type="small"
+            themeColor="textSecondary"
+            style={styles.controlHint}
+          >
+            Tippe auf eine Taste, um sie hervorzuheben. Wechsle den Zoom über
+            die Segmente.
           </ThemedText>
-
-          <Pressable onPress={() => setZoomMode('overview')} style={styles.actionButton}>
-            <ThemedText type="smallBold">Alle 88 Tasten</ThemedText>
-          </Pressable>
-          <Pressable onPress={() => setZoomMode('focus')} style={styles.actionButton}>
-            <ThemedText type="smallBold">Fokusbereich</ThemedText>
-          </Pressable>
-          <Pressable onPress={() => setZoomMode('detail')} style={styles.actionButton}>
-            <ThemedText type="smallBold">Detailansicht</ThemedText>
-          </Pressable>
         </ThemedView>
       </ThemedView>
     </ScrollView>
@@ -108,11 +134,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   contentContainer: {
-    width: '100%',
-    alignItems: 'center',
+    width: "100%",
+    alignItems: "center",
   },
   container: {
-    width: '100%',
+    width: "100%",
     maxWidth: MaxContentWidth,
     flexGrow: 1,
     flexShrink: 1,
@@ -123,26 +149,23 @@ const styles = StyleSheet.create({
     gap: Spacing.one,
     paddingTop: Spacing.two,
   },
-  centerText: {
+  subtitleText: {
     maxWidth: 620,
+    lineHeight: 20,
   },
   keyboardCard: {
     gap: Spacing.one,
     padding: Spacing.two,
     borderRadius: Spacing.three,
   },
-  controlsCard: {
-    gap: Spacing.one,
-    padding: Spacing.three,
+  controlBar: {
+    gap: Spacing.two,
+    padding: Spacing.two,
     borderRadius: Spacing.three,
   },
   controlHint: {
-    lineHeight: 20,
-  },
-  actionButton: {
-    paddingVertical: Spacing.three,
-    paddingHorizontal: Spacing.four,
-    borderRadius: 16,
-    backgroundColor: 'rgba(124,58,237,0.12)',
+    lineHeight: 18,
+    textAlign: "center",
+    opacity: 0.8,
   },
 });
