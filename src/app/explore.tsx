@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, useWindowDimensions } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PianoKeyboard, type KeyboardZoomMode, type PianoKey } from '@/components/piano-keyboard';
@@ -36,19 +36,6 @@ export default function KeyboardModeScreen() {
     bottom: safeAreaInsets.bottom + BottomTabInset + Spacing.three,
   };
 
-  const contentPlatformStyle = Platform.select({
-    android: {
-      paddingTop: insets.top,
-      paddingLeft: insets.left,
-      paddingRight: insets.right,
-      paddingBottom: insets.bottom,
-    },
-    web: {
-      paddingTop: Spacing.four,
-      paddingBottom: Spacing.four,
-    },
-  });
-
   const keys = useMemo(() => {
     return buildDemoKeys().map((key) => ({
       ...key,
@@ -64,7 +51,15 @@ export default function KeyboardModeScreen() {
     <ScrollView
       style={[styles.scrollView, { backgroundColor: theme.background }]}
       contentInset={insets}
-      contentContainerStyle={[styles.contentContainer, contentPlatformStyle]}>
+      contentContainerStyle={[
+        styles.contentContainer,
+        {
+          paddingTop: insets.top,
+          paddingLeft: insets.left,
+          paddingRight: insets.right,
+          paddingBottom: insets.bottom,
+        },
+      ]}>
       <ThemedView style={styles.container}>
         <ThemedView style={styles.titleContainer}>
           <ThemedText type="subtitle">{title}</ThemedText>
