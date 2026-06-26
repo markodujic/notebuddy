@@ -10,38 +10,38 @@ import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 const modes = [
   {
     title: 'Noten erkennen',
-    description: 'Klaviertaste sehen, Name bestimmen und direkt trainieren.',
+    description: 'Note sehen, Ton spielen oder singen und direkt prüfen.',
     icon: '♪',
     accent: '#7c3aed',
-    href: '/explore',
+    href: '/note-to-piano' as const,
+  },
+  {
+    title: 'Klavier → Note',
+    description: 'Taste tippen, Notennamen wählen und bestätigen.',
+    icon: '🎹',
+    accent: '#22c55e',
+    href: '/explore' as const,
   },
   {
     title: 'Notensystem visualisieren',
     description: 'Positionen im System mental erfassen und sicher anwählen.',
     icon: '🎼',
     accent: '#0ea5e9',
-    href: '/explore',
-  },
-  {
-    title: 'Audio',
-    description: 'Ton hören, singen oder spielen und die Note direkt prüfen.',
-    icon: '🎧',
-    accent: '#22c55e',
-    href: '/explore',
+    href: '/explore' as const,
   },
   {
     title: 'Tonumfang',
     description: 'Deinen sicheren Bereich testen und gezielt erweitern.',
     icon: '⚡',
     accent: '#f59e0b',
-    href: '/explore',
+    href: '/explore' as const,
   },
   {
     title: 'Erklärmodus',
     description: 'Mit einem geführten Tutorial die Klaviatur verstehen.',
     icon: '📖',
     accent: '#ec4899',
-    href: '/explore',
+    href: '/explore' as const,
   },
 ];
 
@@ -68,7 +68,7 @@ export default function HomeScreen() {
               description={mode.description}
               icon={mode.icon}
               accent={mode.accent}
-              onPress={() => router.push(mode.href as never)}
+              onPress={() => router.push(mode.href)}
             />
           ))}
         </ThemedView>

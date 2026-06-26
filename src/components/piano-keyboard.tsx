@@ -20,6 +20,7 @@ import { Spacing } from '@/constants/theme';
 
 export type KeyboardZoomMode = 'overview' | 'focus' | 'detail';
 export type KeyboardKeyState = 'idle' | 'current' | 'focused' | 'correct' | 'wrong';
+export type KeyboardFeedback = 'correct' | 'incorrect' | 'too-high' | 'too-low';
 
 export type PianoKey = {
   midi: number;
@@ -35,6 +36,19 @@ type PianoKeyboardProps = {
   interactive?: boolean;
   onKeyPress?: (key: PianoKey) => void;
   onZoomModeChange?: (mode: KeyboardZoomMode) => void;
+  // ── Neue Props (rückwärtskompatibel) ──
+  /** Zielnote (MIDI) – gold/pulsierend. */
+  targetMidi?: number | null;
+  /** Hervorgehobene Note (MIDI). */
+  highlightMidi?: number | null;
+  /** Feedback für die Zielnote. */
+  feedback?: KeyboardFeedback | null;
+  /** Notennamen als Labels auf den Tasten (MIDI → Text). */
+  keyLabels?: Record<number, string>;
+  /** Multi-Tasten-Highlight in Grün (Tutorial). */
+  greenKeys?: number[];
+  /** Sichtbarer Ausschnitt (MIDI min/max). */
+  visibleRange?: [number, number];
 };
 
 const DEFAULT_START_MIDI = 21;
@@ -125,13 +139,48 @@ export function PianoKeyboard({
   interactive = true,
   onKeyPress,
   onZoomModeChange,
+  targetMidi,
+  highlightMidi,
+  feedback,
+  keyLabels,
+  greenKeys,
+  visibleRange,
 }: PianoKeyboardProps) {
   const { width } = useWindowDimensions();
   const isPortrait = width < 520;
   const [viewportWidth, setViewportWidth] = useState(0);
   const isFirstLayout = useRef(true);
 
-  const keyboardKeys = useMemo(() => keys ?? makeDefaultKeys(), [keys]);
+  // Wenn neue Props (targetMidi/feedback/greenKeys) gesetzt sind,
+  // wenden wir die States auf die Keys an.
+  const keyboardKeys = useMemo(() => {
+    const base = keys ?? makeDefaultKeys();
+    const hasNewProps =
+      targetMidi !== undefined ||
+      targetMidi !== null ||
+      highlightMidi !== undefined ||
+      highlightMidi !== null ||
+      feedback !== undefined ||
+      greenKeys !== undefined;
+
+    if (!hasNewProps) return base;
+
+    return base.map((key) => {
+      let state: KeyboardKeyState = key.state ?? 'idle';
+      if (greenKeys?.includes(key.midi)) state = 'correct';
+      if (highlightMidi !== null && highlightMidi !== undefined && key.midi === highlightMidi) {
+        state = 'focused';
+      }
+      if (targetMidi !== null && targetMidi !== undefined && key.midi === targetMidi) {
+        if (feedback === 'correct') state = 'correct';
+        else if (feedback === 'incorrect') state = 'wrong';
+        else state = 'current';
+      }
+      const note = keyLabels?.[key.midi] ?? key.note;
+      return { ...key, state, note };
+    });
+  }, [keys, targetMidi, highlightMidi, feedback, greenKeys, keyLabels]);
+
   const whiteKeys = useMemo(
     () => keyboardKeys.filter((key) => !key.isBlack),
     [keyboardKeys],
