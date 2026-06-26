@@ -1,0 +1,181 @@
+# notebuddy – Debugging-Protokoll
+
+> Dokumentation aller aufgetretenen Probleme und ihrer Lösungen beim Aufbau der App (Stand: 2026-06-26).
+
+---
+
+## 1. Navigation: "Noten erkennen" öffnet nichts
+
+**Symptom:** Auf "Noten erkennen" tippen → nichts passiert.
+
+**Ursache:** Die Route `/mode/note-to-piano` war verschachtelt (`src/app/mode/note-to-piano.tsx`), aber nicht als Tab-Trigger in `NativeTabs` registriert. Expo Router mit `NativeTabs` erwartet jede Route als Top-Level-Tab-Trigger.
+
+**Lösung:**
+- Route verschoben zu `src/app/note-to-piano.tsx` (Top-Level)
+- Tab-Trigger in `app-tabs.tsx` hinzugefügt: `note-to-piano` als dritter Tab "Üben"
+- Home-Link angepasst: `router.push('/note-to-piano')`
+
+---
+
+## 2. Stability-Logik: Ring füllt sich nie
+
+**Symptom:** PitchRing-Animation füllt sich nicht, selbst wenn die richtige Note gespielt wird. Modus ist praktisch unbrauchbar.
+
+**Ursache:** Falsche Stability-Logik im note-to-piano Screen. Die Stabilität wurde nur getrackt, wenn die exakte Zielnote gespielt wurde (`isMatch = matchesNote(...)`). Die alte App trackt jedoch die Stabilität von **jedem** gehaltenen Ton und prüft erst danach die Korrektheit.
+
+**Vergleich alte App (`App.svelte` Zeile 375):**
+```js
+// Alt: isMatch immer true – trackt jeden Ton
+const status = stability.update(detectedMidi, true, result.timestamp);
+```
+
+**notebuddy (vorher):**
+```ts
+// Falsch: isMatch nur bei korrekter Note
+const isMatch = matchesNote(frame.frequency, targetMidi, toleranceCents);
+const result = stabilityRef.current.update(detectedMidi, isMatch, frame.timestamp);
+```
+
+**Lösung:** `isMatch` immer `true` übergeben, correctness erst nach `result.isStable` prüfen:
+```ts
+const result = stabilityRef.current.update(detectedMidi, true, frame.timestamp);
+if (result.isStable) {
+  const isCorrect = matchesNote(frame.frequency, currentTargetMidi, toleranceCents);
+  submitAnswerRef.current?.(isCorrect ? currentTargetMidi : detectedMidi, frame.frequency);
+}
+```
+
+---
+
+## 3. Silence Gate fehlte
+
+**Symptom:** Carry-Over von der vorherigen Antwort verzerrt die Erkennung.
+
+**Ursache:** Die alte App fordert ~50ms Stille, bevor ein neuer Pitch akzeptiert wird (`SILENCE_GATE_FRAMES = 3`). notebuddy hatte diese Logik nicht.
+
+**Lösung:** `silenceGatePassedRef` und `gateSilenceCountRef` hinzugefügt. Vor jedem Pitch muss erst Stille erkannt werden:
+```ts
+if (!silenceGatePassedRef.current) {
+  if (frame.frequency === 0 || frame.rms < 0.01) {
+    gateSilenceCountRef.current += 1;
+    if (gateSilenceCountRef.current >= SILENCE_GATE_FRAMES) {
+      silenceGatePassedRef.current = true;
+    }
+  }
+  return;
+}
+```
+
+---
+
+## 4. Volume-Normalisierung falsch
+
+**Symptom:** PitchRing-Volume-Arc reagiert nicht richtig.
+
+**Ursache:** Falsche Skalierung der RMS-Werte für die Visualisierung.
+
+**Alt:** `smoothedRms / 0.15`
+**notebuddy (vorher):** `rms * 10`
+
+**Lösung:** `/ 0.15` wie die alte App.
+
+---
+
+## 5. Mikrofon-Berechtigungen fehlten
+
+**Symptom:** Kein Mikrofon-Berechtigungsdialog, kein Ton erkannt.
+
+**Ursache:** `app.json` hatte keine Mikrofon-Berechtigungen konfiguriert.
+
+**Lösung:**
+```json
+"ios": {
+  "infoPlist": {
+    "NSMicrophoneUsageDescription": "Diese App benötigt Mikrofonzugang..."
+  }
+},
+"android": {
+  "permissions": ["RECORD_AUDIO"]
+}
+```
+
+---
+
+## 6. setAudioModeAsync fehlte
+
+**Symptom:** Stream startet (`isStreaming: true`), aber keine Audio-Buffer.
+
+**Ursache:** `setAudioModeAsync()` wurde vor `stream.start()` nicht aufgerufen. Ohne diese Konfiguration startet iOS/Android die Audio-Session nicht korrekt.
+
+**Lösung:** Audio-Modus vor Stream-Start konfigurieren:
+```ts
+await setAudioModeAsync({
+  allowsRecording: true,
+  playsInSilentMode: true,
+  shouldPlayInBackground: false,
+  interruptionMode: 'duckOthers',
+});
+await stream.start();
+```
+
+---
+
+## 7. ⭐ allowsRecording: true fehlte (Root Cause Audio)
+
+**Symptom:** Alle Logs zeigen Erfolg (`Permission granted: true`, `Stream started: true`), aber `[AudioEngine] Buffer received` erscheint nie.
+
+**Ursache:** `setAudioModeAsync` wurde zwar aufgerufen, aber ohne `allowsRecording: true`. Ohne diesen Schalter wird das Mikrofon nicht aktiviert, selbst wenn der Stream läuft.
+
+**Lösung:** `allowsRecording: true` zur `setAudioModeAsync` Konfiguration hinzugefügt.
+
+---
+
+## 8. Dev-App neu bauen erforderlich
+
+**Symptom:** Nach allen Code-Fixes immer noch kein Mikrofon-Dialog und kein Audio.
+
+**Ursache:** `NSMicrophoneUsageDescription` ist ein Build-Zeit-Eintrag in der iOS Info.plist. Die Dev-App wurde vor der `app.json`-Änderung gebaut. Der Dev-Client gibt `granted: true` zurück (Täuschung), aber iOS startet die Audio-Session nicht ohne den Info.plist-Eintrag.
+
+**Lösung:** Dev-App neu bauen:
+```bash
+npx expo prebuild --clean
+npx expo run:ios    # oder run:android
+# oder
+eas build --profile development --platform ios
+```
+
+---
+
+## 9. Font-Loader blockierte App-Start (behoben)
+
+**Symptom:** Weißer Bildschirm nach App-Start.
+
+**Ursache:** `useAppFonts()` im Root-Layout blockierte das Rendering, bis Bravura geladen war.
+
+**Lösung:** Font-Loader aus `_layout.tsx` entfernt. Fonts werden lazy geladen.
+
+---
+
+## 10. Bravura-Font Pfad-Alias
+
+**Symptom:** Font-Loading schlägt fehl.
+
+**Ursache:** `require('@/assets/fonts/Bravura.otf')` funktioniert nicht zuverlässig mit Metro.
+
+**Lösung:** Relativer Pfad: `require('../../assets/fonts/Bravura.otf')`
+
+---
+
+## Zusammenfassung der Commits
+
+| Commit | Beschreibung |
+|---|---|
+| `590afa3` | Initial: Domain, Services, UI, Pilot-Modus |
+| `03de5d3` | Stability-Logik, Silence Gate, Volume, submitAnswer |
+| `b59756a` | Mikrofon-Berechtigungen + setAudioModeAsync |
+| `8b91954` | stream.addListener statt onBuffer (später reverted) |
+| `7714c23` | allowsRecording: true (Root Cause Audio) |
+
+---
+
+*Zuletzt aktualisiert: 2026-06-26*

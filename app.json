@@ -12,7 +12,8 @@
       "bundleIdentifier": "com.ddigitall.notebuddy",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "NSMicrophoneUsageDescription": "Diese App benötigt Mikrofonzugang zur Tonhöhenerkennung beim Notenlernen."
+        "NSMicrophoneUsageDescription": "Diese App benötigt Mikrofonzugang zur Tonhöhenerkennung beim Notenlernen.",
+        "NSSpeechRecognitionUsageDescription": "Allow $(PRODUCT_NAME) to use speech recognition."
       }
     },
     "android": {
@@ -23,7 +24,14 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "permissions": ["RECORD_AUDIO"]
+      "permissions": [
+        "RECORD_AUDIO",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
+      ],
+      "package": "com.ddigitall.notebuddy"
     },
     "plugins": [
       "expo-router",
