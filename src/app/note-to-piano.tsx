@@ -8,6 +8,9 @@
  *   4. Pitch-Detection + Stability-Check
  *   5. Bewertung → Feedback
  *   6. Nächste Aufgabe
+ *
+ * ⚠️ WICHTIG: Audio-Verarbeitung läuft in Refs (kein Re-Render pro Frame).
+ * Die UI entscheidet selbst, ob/wann sie re-rendert.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -21,11 +24,7 @@ import { StaffView } from '@/components/staff/staff-view';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
-import {
-    LEARNING_CONFIG,
-    getNotation,
-    matchesNote
-} from '@/domain';
+import { LEARNING_CONFIG, getNotation, matchesNote } from '@/domain';
 import { useBreakpoint } from '@/hooks/use-breakpoint';
 import { useTheme } from '@/hooks/use-theme';
 import { useAudioEngine } from '@/services/audio-engine';
@@ -65,62 +64,101 @@ export default function NoteToPianoScreen() {
   const stabilityRef = useRef<StabilityTracker | null>(null);
   const silenceFramesRef = useRef(0);
   const isAnsweringRef = useRef(false);
+  // Silence Gate: Initial müssen ~50ms Stille erkannt werden, bevor Pitch akzeptiert wird.
+  // Verhindert Carry-Over von der vorherigen Antwort.
+  const silenceGatePassedRef = useRef(false);
+  const gateSilenceCountRef = useRef(0);
+  const SILENCE_GATE_FRAMES = 3;
+
+  // Refs für phase und targetMidi, damit der Audio-Callback stabil bleibt
+  // (ohne ihn bei jedem Render neu zu erzeugen)
+  const phaseRef = useRef(phase);
+  const targetMidiRef = useRef<number | null>(null);
+  useEffect(() => {
+    phaseRef.current = phase;
+  }, [phase]);
 
   // Target Note für aktuelle Aufgabe
   const targetMidi = session.currentExercise?.targetNote.midi ?? null;
   const targetName = targetMidi !== null ? notation.midiToDisplay(targetMidi) : '';
+  useEffect(() => {
+    targetMidiRef.current = targetMidi;
+  }, [targetMidi]);
+
+  // Submit-Ref (vermeidet Dependency-Cycle)
+  const submitAnswerRef = useRef<
+    ((detectedMidi: number, frequency: number) => void) | null
+  >(null);
 
   // ── Audio Callback ──
+  // Stabil (kein Re-Render bei Phase/Target-Änderung).
+  // Liest aktuelle Werte aus Refs.
   const handleAudioFrame = useCallback(
     (frame: { frequency: number; clarity: number; rms: number; timestamp: number }) => {
-      // Ignoriere Frames ohne Phase 'listening'
-      if (phase !== 'listening') return;
-      if (targetMidi === null) return;
+      const currentPhase = phaseRef.current;
+      const currentTargetMidi = targetMidiRef.current;
+
+      if (currentPhase !== 'listening') return;
+      if (currentTargetMidi === null) return;
       if (isAnsweringRef.current) return;
 
-      // Stille-Frame
+      // Volume-Visualisierung (wie alte App: smoothedRms / 0.15)
+      setVolume(Math.min(1, frame.rms / 0.15));
+
+      // ── Silence Gate (initial) ──
+      // Vor dem ersten Pitch müssen ~50ms Stille erkannt werden,
+      // um Carry-Over von der vorherigen Antwort zu verhindern.
+      if (!silenceGatePassedRef.current) {
+        if (frame.frequency === 0 || frame.rms < 0.01) {
+          gateSilenceCountRef.current += 1;
+          if (gateSilenceCountRef.current >= SILENCE_GATE_FRAMES) {
+            silenceGatePassedRef.current = true;
+          }
+        } else {
+          gateSilenceCountRef.current = 0;
+        }
+        return;
+      }
+
+      // ── Stille-Frame ──
       if (frame.frequency === 0) {
         silenceFramesRef.current += 1;
         if (silenceFramesRef.current >= 5) {
           stabilityRef.current?.reset();
           setStabilityProgress(0);
+          setDetectedNote('');
         }
         return;
       }
 
       silenceFramesRef.current = 0;
 
-      // Pitch erkannt
+      // ── Pitch erkannt ──
       const detectedMidi = Math.round(12 * Math.log2(frame.frequency / 440) + 69);
-      const detectedName = notation.midiToName(detectedMidi);
-      setDetectedNote(detectedName);
-      setVolume(Math.min(1, frame.rms * 10));
+      setDetectedNote(notation.midiToName(detectedMidi));
 
       // Stability-Tracker initialisieren falls nötig
       if (!stabilityRef.current) {
         stabilityRef.current = new StabilityTracker({
-          targetMidi,
+          targetMidi: currentTargetMidi,
           toleranceCents,
           stabilityMs,
         });
       }
 
-      const isMatch = matchesNote(frame.frequency, targetMidi, toleranceCents);
-      const result = stabilityRef.current.update(
-        detectedMidi,
-        isMatch,
-        frame.timestamp,
-      );
-
+      // ⭐ KORREKTUR: Stabilität für JEDEN Ton tracken (isMatch immer true),
+      // wie die alte App. Erst nach Stability wird geprüft, ob die Note korrekt ist.
+      const result = stabilityRef.current.update(detectedMidi, true, frame.timestamp);
       setStabilityProgress(result.progress);
 
-      // Stabil → Antwort einreichen
-      if (result.isStable && isMatch) {
+      // Stabil → erst JETZT correctness prüfen
+      if (result.isStable) {
+        const isCorrect = matchesNote(frame.frequency, currentTargetMidi, toleranceCents);
         isAnsweringRef.current = true;
-        submitAnswer(detectedMidi, frame.frequency);
+        submitAnswerRef.current?.(isCorrect ? currentTargetMidi : detectedMidi, frame.frequency);
       }
     },
-    [phase, targetMidi, toleranceCents, stabilityMs, notation],
+    [toleranceCents, stabilityMs, notation],
   );
 
   // ── Audio Engine ──
@@ -140,7 +178,6 @@ export default function NoteToPianoScreen() {
       setFeedbackMessage(correct ? 'Richtig!' : `Gespielt: ${notation.midiToName(detectedMidi)}`);
       setFeedbackVisible(true);
 
-      // Feedback-Timing
       const delay = correct
         ? LEARNING_CONFIG.FEEDBACK_CORRECT_MS
         : LEARNING_CONFIG.FEEDBACK_INCORRECT_MS;
@@ -158,17 +195,23 @@ export default function NoteToPianoScreen() {
     [session, audio, notation],
   );
 
+  // submitAnswer in Ref halten (für stabilen Audio-Callback)
+  useEffect(() => {
+    submitAnswerRef.current = submitAnswer;
+  }, [submitAnswer]);
+
   // ── Neue Aufgabe → Listening starten ──
   useEffect(() => {
     if (phase === 'asking' && targetMidi !== null) {
       isAnsweringRef.current = false;
       silenceFramesRef.current = 0;
+      silenceGatePassedRef.current = false;
+      gateSilenceCountRef.current = 0;
       stabilityRef.current = null;
       setStabilityProgress(0);
       setDetectedNote('');
       setVolume(0);
 
-      // Kurze Pause, dann Audio starten
       const timer = setTimeout(() => {
         setPhase('listening');
         audio.startListening();
@@ -176,7 +219,7 @@ export default function NoteToPianoScreen() {
 
       return () => clearTimeout(timer);
     }
-  }, [phase, targetMidi]);
+  }, [phase, targetMidi, audio]);
 
   // ── Cleanup ──
   useEffect(() => {
@@ -194,6 +237,7 @@ export default function NoteToPianoScreen() {
         onlyNaturalNotes: true,
       });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Keyboard Feedback Mapping
