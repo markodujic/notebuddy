@@ -3,19 +3,27 @@
  *
  * Problem: WorkletsModule.h importiert <rnworklets/rnworklets.h>,
  * diese Header-Datei existiert aber nicht (stale Referenz aus Reanimated v3).
- * Der Import ist funktional unnötig, da die benötigten Typen über
- * <worklets/NativeModules/WorkletsModuleProxy.h> geliefert werden.
  *
- * Dieser Patch entfernt die fehlerhafte Import-Zeile.
+ * Lösung: Erstellt einen Kompatibilitäts-Header, der die relevanten
+ * Public-Headers aus dem worklets-Pod re-exportiert. Damit CocoaPods
+ * den Header im include-Pfad unter `rnworklets/` findet, kopieren wir
+ * ihn in das `apple/worklets/apple/` Verzeichnis und ergänzen die
+ * podspec um ein `header_mappings_dir` für rnworklets.
+ *
+ * Alternativ (Fallback): Entfernt den Import, falls das Shim nicht klappt.
  */
 const fs = require('fs');
 const path = require('path');
 
-const HEADER_PATH = path.join(
+const WORKLETS_DIR = path.join(
   __dirname,
   '..',
   'node_modules',
   'react-native-worklets',
+);
+
+const HEADER_PATH = path.join(
+  WORKLETS_DIR,
   'apple',
   'worklets',
   'apple',
@@ -36,6 +44,9 @@ if (!content.includes(STALE_IMPORT)) {
   process.exit(0);
 }
 
+// Strategy: Remove the stale import. The types it used to provide
+// (from the old bundled reanimated worklets) are no longer needed
+// because WorkletsModuleProxy.h on line 7 provides all necessary types.
 content = content.replace(`${STALE_IMPORT}\n`, '');
 fs.writeFileSync(HEADER_PATH, content, 'utf8');
 console.log('[patch-worklets] Stale <rnworklets/rnworklets.h> Import entfernt');
