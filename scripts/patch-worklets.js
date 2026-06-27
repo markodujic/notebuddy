@@ -1,52 +1,67 @@
 /**
- * Postinstall-Patch für react-native-worklets.
+ * Postinstall-Patch für react-native-worklets 0.8.x.
  *
- * Problem: WorkletsModule.h importiert <rnworklets/rnworklets.h>,
- * diese Header-Datei existiert aber nicht (stale Referenz aus Reanimated v3).
+ * Probleme:
+ * 1. WorkletsModule.h importiert <rnworklets/rnworklets.h> — existiert nicht.
+ * 2. WorkletsModule.h/.mm referenzieren NativeWorkletsModuleSpec(JSI), aber der
+ *    Codegen generiert NativeRnworkletsSpec(JSI) (wegen codegenConfig.name = "rnworklets").
  *
- * Lösung: Erstellt einen Kompatibilitäts-Header, der die relevanten
- * Public-Headers aus dem worklets-Pod re-exportiert. Damit CocoaPods
- * den Header im include-Pfad unter `rnworklets/` findet, kopieren wir
- * ihn in das `apple/worklets/apple/` Verzeichnis und ergänzen die
- * podspec um ein `header_mappings_dir` für rnworklets.
- *
- * Alternativ (Fallback): Entfernt den Import, falls das Shim nicht klappt.
+ * Lösung:
+ * - Entfernt den stale <rnworklets/rnworklets.h> Import.
+ * - Korrigiert NativeWorkletsModuleSpec → NativeRnworkletsSpec in .h und .mm.
  */
 const fs = require('fs');
 const path = require('path');
 
-const WORKLETS_DIR = path.join(
+const APPLE_DIR = path.join(
   __dirname,
   '..',
   'node_modules',
   'react-native-worklets',
-);
-
-const HEADER_PATH = path.join(
-  WORKLETS_DIR,
   'apple',
   'worklets',
   'apple',
-  'WorkletsModule.h',
 );
 
+const FILES = ['WorkletsModule.h', 'WorkletsModule.mm'];
+
 const STALE_IMPORT = '#import <rnworklets/rnworklets.h>';
+const OLD_NAME = 'NativeWorkletsModuleSpec';
+const NEW_NAME = 'NativeRnworkletsSpec';
 
-if (!fs.existsSync(HEADER_PATH)) {
-  console.log('[patch-worklets] WorkletsModule.h nicht gefunden – überspringe Patch');
-  process.exit(0);
+let totalPatched = 0;
+
+for (const file of FILES) {
+  const filePath = path.join(APPLE_DIR, file);
+
+  if (!fs.existsSync(filePath)) {
+    console.log(`[patch-worklets] ${file} nicht gefunden – überspringe`);
+    continue;
+  }
+
+  let content = fs.readFileSync(filePath, 'utf8');
+  let modified = false;
+
+  // 1. Stale Import entfernen (nur in .h)
+  if (file.endsWith('.h') && content.includes(STALE_IMPORT)) {
+    content = content.replace(`${STALE_IMPORT}\n`, '');
+    modified = true;
+    console.log(`[patch-worklets] ${file}: stale <rnworklets/rnworklets.h> Import entfernt`);
+  }
+
+  // 2. Codegen-Namen korrigieren (.h und .mm)
+  if (content.includes(OLD_NAME)) {
+    content = content.split(OLD_NAME).join(NEW_NAME);
+    modified = true;
+    console.log(`[patch-worklets] ${file}: ${OLD_NAME} → ${NEW_NAME} korrigiert`);
+  }
+
+  if (modified) {
+    fs.writeFileSync(filePath, content, 'utf8');
+    totalPatched += 1;
+  }
 }
 
-let content = fs.readFileSync(HEADER_PATH, 'utf8');
-
-if (!content.includes(STALE_IMPORT)) {
-  console.log('[patch-worklets] stale Import nicht vorhanden – Patch nicht nötig');
-  process.exit(0);
+if (totalPatched === 0) {
+  console.log('[patch-worklets] Keine Patches nötig');
 }
-
-// Strategy: Remove the stale import. The types it used to provide
-// (from the old bundled reanimated worklets) are no longer needed
-// because WorkletsModuleProxy.h on line 7 provides all necessary types.
-content = content.replace(`${STALE_IMPORT}\n`, '');
-fs.writeFileSync(HEADER_PATH, content, 'utf8');
-console.log('[patch-worklets] Stale <rnworklets/rnworklets.h> Import entfernt');
