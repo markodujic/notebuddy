@@ -195,4 +195,29 @@ require('../../assets/fonts/Bravura.otf')
 
 ---
 
+## 13. ⚠️ `react-native-worklets` stale Header Import (`rnworklets.h`)
+
+**Pitfall:** `react-native-worklets@0.8.x` hat einen Bug in `WorkletsModule.h` (Zeile 5): Ein veralteter Import `#import <rnworklets/rnworklets.h>` verweist auf eine Header-Datei, die nicht existiert (Relikt aus Reanimated v3). Der iOS-Build bricht mit folgendem Fehler ab:
+
+```
+'rnworklets/rnworklets.h' file not found
+```
+
+**Wichtig:** Dies ist **keine** Versions-Inkompatibilität! `reanimated@4.3.1` und `worklets@0.8.3` sind laut `npx expo install --check` die korrekten, kompatiblen Versionen. Der Import ist einfach funktional unnötig, da `WorkletsModuleProxy.h` (Zeile 7) alle nötigen Typen liefert.
+
+**Lösung:** Postinstall-Patch (`scripts/patch-worklets.js`) entfernt die fehlerhafte Import-Zeile automatisch nach `npm install`. Der Patch ist idempotent und läuft auch bei EAS-Builds (da diese `npm install` ausführen).
+
+```bash
+# package.json
+"scripts": {
+  "postinstall": "node ./scripts/patch-worklets.js"
+}
+```
+
+**⚠️ Warnung:** Keinesfalls `react-native-worklets` auf `0.9.x` oder höher upgraden, während `reanimated` auf `4.3.1` bleibt. `worklets@0.9.x` verursacht schwerwiegende TurboModule/Codegen-Build-Fehler (`NativeWorkletsModuleSpec` nicht gefunden, etc.). Die Versionen müssen als Paar gemeinsam aktualisiert werden.
+
+**Schlüssel-Learning:** Postinstall-Patches sind ein gängiges und zuverlässiges Muster in der React-Native-Welt, um Bugs in nativen Dependencies zu umgehen, ohne auf offizielle Fixes zu warten.
+
+---
+
 *Zuletzt aktualisiert: 2026-06-27*
