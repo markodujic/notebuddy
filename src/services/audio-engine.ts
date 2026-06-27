@@ -1,20 +1,16 @@
 /**
- * Audio-Engine – Pitch-Detection-Pipeline auf Basis von expo-audio.
+ * Audio-Engine – Pitch-Detection-Pipeline auf Basis von react-native-audio-api.
  *
  * ⚠️ Architektur: Audio-Verarbeitung passiert in Refs/Callbacks,
  * NICHT im React-Render-Zyklus. Ergebnisse werden via Callbacks emittiert.
  * Die UI entscheidet selbst, ob/wann sie re-rendert (über Stores/Selektoren).
  *
  * Pipeline:
- *   AudioStream (PCM) → RMS-Gate → PitchDetector → Callback
+ *   AudioRecorder (PCM) → RMS-Gate → PitchDetector → Callback
  */
 
-import {
-  requestRecordingPermissionsAsync,
-  setAudioModeAsync,
-  useAudioStream,
-} from 'expo-audio';
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { AudioManager, AudioRecorder } from 'react-native-audio-api';
 
 import {
   CLARITY_THRESHOLD,
@@ -43,11 +39,13 @@ export function useAudioEngine(
   onFrame: AudioEngineCallback,
   onError?: AudioEngineErrorCallback,
 ) {
+  const recorderRef = useRef<AudioRecorder | null>(null);
   const detectorRef = useRef<MacLeodPitchDetector | null>(null);
   const volumeEmaRef = useRef(0);
   const onFrameRef = useRef(onFrame);
   const onErrorRef = useRef(onError);
   const sampleRateRef = useRef(44100);
+  const [isStreaming, setIsStreaming] = useState(false);
 
   useEffect(() => {
     onFrameRef.current = onFrame;
@@ -57,13 +55,12 @@ export function useAudioEngine(
   }, [onError]);
 
   /**
-   * Verarbeitet einen rohen PCM-Buffer: RMS → Pitch-Detection → Callback.
+   * Verarbeitet rohe PCM-Samples: RMS → Pitch-Detection → Callback.
    */
-  const processBuffer = useCallback(
-    (data: ArrayBuffer, sampleRate: number, timestamp: number) => {
+  const processSamples = useCallback(
+    (samples: Float32Array, sampleRate: number, timestamp: number) => {
       try {
         sampleRateRef.current = sampleRate;
-        const samples = new Float32Array(data);
         const rms = calculateRMS(samples);
         volumeEmaRef.current = emaSmooth(volumeEmaRef.current, rms, VOLUME_EMA_FACTOR);
 
@@ -98,70 +95,78 @@ export function useAudioEngine(
     [],
   );
 
-  // Audio-Stream erstellen mit onBuffer Callback
-  const { stream } = useAudioStream({
-    sampleRate: 44100,
-    channels: 1,
-    encoding: 'float32',
-    onBuffer: (buffer) => {
-      console.log('[AudioEngine] Buffer received:', buffer.data.byteLength, 'bytes');
-      processBuffer(buffer.data, buffer.sampleRate, buffer.timestamp);
-    },
-  });
+  // Recorder erst beim Start erstellen (Lazy Init)
+  const ensureRecorder = useCallback(() => {
+    if (!recorderRef.current) {
+      const recorder = new AudioRecorder();
+
+      recorder.onAudioReady(
+        {
+          sampleRate: 44100,
+          bufferLength: DEFAULT_BUFFER_SIZE,
+          channelCount: 1,
+        },
+        (event) => {
+          const samples = event.buffer.getChannelData(0);
+          processSamples(samples, event.buffer.sampleRate, event.when);
+        },
+      );
+
+      recorder.onError((error) => {
+        onErrorRef.current?.(new Error(error.message));
+      });
+
+      recorderRef.current = recorder;
+    }
+    return recorderRef.current;
+  }, [processSamples]);
 
   /**
-   * Fordert Mikrofon-Berechtigung an, konfiguriert Audio-Modus und startet den Stream.
+   * Fordert Mikrofon-Berechtigung an, konfiguriert Audio-Session und startet die Aufnahme.
    */
   const startListening = useCallback(async () => {
-    console.log('[AudioEngine] startListening, stream:', !!stream);
-    if (!stream) {
-      onErrorRef.current?.(new Error('Audio-Stream nicht verfügbar'));
-      return;
-    }
-
     try {
       // 1. Berechtigung anfordern
-      const permission = await requestRecordingPermissionsAsync();
-      console.log('[AudioEngine] Permission granted:', permission.granted);
-      if (!permission.granted) {
+      const permission = await AudioManager.requestRecordingPermissions();
+      if (permission !== 'Granted') {
         onErrorRef.current?.(new Error('Mikrofon-Berechtigung verweigert'));
         return;
       }
 
-      // 2. Audio-Modus konfigurieren
-      // WICHTIG: allowsRecordingIOS muss true sein für iOS-Aufnahme!
-      await setAudioModeAsync({
-        allowsRecording: true,
-        playsInSilentMode: true,
-        shouldPlayInBackground: false,
-        interruptionMode: 'duckOthers',
+      // 2. Audio-Session konfigurieren (iOS)
+      // WICHTIG: playAndRecord für Aufnahme + ggf. Wiedergabe
+      AudioManager.setAudioSessionOptions({
+        iosCategory: 'playAndRecord',
+        iosMode: 'measurement',
+        iosOptions: ['defaultToSpeaker', 'allowBluetoothA2DP'],
+        iosNotifyOthersOnDeactivation: true,
       });
-      console.log('[AudioEngine] Audio mode set');
 
-      // 3. Stream starten
+      // 3. Recorder erstellen und starten
+      const recorder = ensureRecorder();
       volumeEmaRef.current = 0;
-      await stream.start();
-      console.log('[AudioEngine] Stream started, isStreaming:', stream.isStreaming);
+      recorder.start();
+      setIsStreaming(true);
     } catch (err) {
-      console.error('[AudioEngine] ERROR:', err);
       const error = err instanceof Error ? err : new Error(String(err));
       onErrorRef.current?.(error);
     }
-  }, [stream]);
+  }, [ensureRecorder]);
 
   /**
-   * Stoppt den Stream.
+   * Stoppt die Aufnahme.
    */
   const stopListening = useCallback(() => {
     try {
-      if (stream && stream.isStreaming) {
-        stream.stop();
+      if (recorderRef.current?.isRecording()) {
+        recorderRef.current.stop();
       }
     } catch {
       // Ignorieren
     }
     volumeEmaRef.current = 0;
-  }, [stream]);
+    setIsStreaming(false);
+  }, []);
 
   /**
    * Setzt den Pitch-Detector zurück.
@@ -175,19 +180,20 @@ export function useAudioEngine(
   useEffect(() => {
     return () => {
       try {
-        if (stream && stream.isStreaming) {
-          stream.stop();
+        if (recorderRef.current?.isRecording()) {
+          recorderRef.current.stop();
         }
+        recorderRef.current?.clearOnAudioReady();
       } catch {
         // Ignorieren
       }
     };
-  }, [stream]);
+  }, []);
 
   return {
     startListening,
     stopListening,
     resetDetector,
-    isStreaming: stream?.isStreaming ?? false,
+    isStreaming,
   };
 }

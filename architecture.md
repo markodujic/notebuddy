@@ -23,9 +23,9 @@ Diese Datei beschreibt eine sinnvolle Architektur für **notebuddy** auf Basis d
    - Keine zyklischen Abhängigkeiten zwischen Visualisierung und Audio.
 
 4. **Performance zuerst**
-   - `reanimated` / Skia / SVG für Animation und Visualisierung
-   - `expo-audio` / `expo-speech-recognition` für Audio und Sprache
-   - minimale Re-Renders durch saubere Zustandsgrenzen
+    - `reanimated` / Skia / SVG für Animation und Visualisierung
+    - `react-native-audio-api` / `expo-speech-recognition` für Audio und Sprache
+    - minimale Re-Renders durch saubere Zustandsgrenzen
 
 ## Architekturübersicht
 
@@ -64,7 +64,7 @@ Verantwortlich für Geräte- und Systemzugriffe.
 
 | API | Aufgabe |
 |-----|---------|
-| `expo-audio` | Aufnahme / Wiedergabe |
+| `react-native-audio-api` | Aufnahme / Wiedergabe |
 | `expo-speech-recognition` | Spracheingabe |
 | `expo-sqlite` | lokale Persistenz |
 | `expo-linking` | Deep Links |
@@ -155,7 +155,7 @@ src/
 | Paket | Rolle |
 |------|------|
 | `expo-router` | Routing / Screens |
-| `expo-audio` | Audio-Handling |
+| `react-native-audio-api` | Audio-Handling |
 | `expo-speech-recognition` | Spracheingabe |
 | `expo-sqlite` | Persistenz |
 | `expo-font` | Fonts / Notation |
