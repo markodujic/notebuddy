@@ -11,7 +11,7 @@
 | **Pilot-Modus** | Note → Klavier (Audio-Eingabe) |
 | **Domain-Layer** | Framework-neutrale Logik 1:1 von Svelte nach TS portieren |
 | **Notensystem-Rendering** | Skia selbst gezeichnet (Default laut AGENTS.md) |
-| **Pitch-Detection** | Autocorrelation (MacLeod/YIN) auf `expo-audio` |
+| **Pitch-Detection** | Autocorrelation (MacLeod/YIN) auf `react-native-audio-api` |
 | **State Management** | Zustand |
 | **Notation** | 4 Systeme (German default, English, Solfège, Nordic) via Registry |
 | **Animationen** | Reanimated 4 |
@@ -64,7 +64,7 @@
 - [x] `npm i zustand`
 - [x] `stores/app-store.ts` – Globaler State (mode, clef, ranges, settings, notation, darkMode)
 - [x] `stores/session-store.ts` – Session-Zustand (currentExercise, index, progress)
-- [x] `services/audio-engine.ts` – `expo-audio` Stream + Autocorrelation Pitch-Detector, RMS-Gate, Clarity
+- [x] `services/audio-engine.ts` – `react-native-audio-api` AudioRecorder + Autocorrelation Pitch-Detector, RMS-Gate, Clarity
 - [x] `services/pitch-detector.ts` – MacLeod Autocorrelation-Algorithmus (NSDF)
 - [x] `services/stability-tracker.ts` – Stabilitäts-Logik (rein)
 - [x] `services/pitch-utils.ts` – Brücke Service→Domain (`frequency.ts`)

@@ -1,6 +1,6 @@
 # notebuddy – Pitfalls & Lessons Learned
 
-> Wichtige Fallstricke und Learnings beim Aufbau der notebuddy-App mit Expo SDK 56, expo-audio und React Native. Stand: 2026-06-26.
+> Wichtige Fallstricke und Learnings beim Aufbau der notebuddy-App mit Expo SDK 56, react-native-audio-api und React Native. Stand: 2026-06-27.
 
 ---
 
@@ -24,9 +24,9 @@ echo "package-lock.json" > .easignore
 
 ---
 
-## 2. ⚠️ `setAudioModeAsync` zwingend erforderlich
+## 2. ⚠️ Audio-Session-Konfiguration zwingend erforderlich
 
-**Pitfall:** `stream.start()` von `expo-audio` schlägt nicht fehl, liefert aber **stillschweigend keine Audio-Buffer**, wenn der Audio-Modus nicht konfiguriert ist.
+**Pitfall:** `recorder.start()` von `react-native-audio-api` schlägt nicht fehl, liefert aber **stillschweigend keine Audio-Buffer**, wenn die Audio-Session nicht konfiguriert ist.
 
 **Symptom:** Alle Logs zeigen Erfolg:
 ```
@@ -35,18 +35,18 @@ echo "package-lock.json" > .easignore
 ```
 Aber `[AudioEngine] Buffer received` erscheint **nie**.
 
-**Lösung:** Vor `stream.start()` muss `setAudioModeAsync` aufgerufen werden:
+**Lösung:** Vor `recorder.start()` muss `AudioManager.setAudioSessionOptions` aufgerufen werden:
 ```ts
-await setAudioModeAsync({
-  allowsRecording: true,  // ⭐ Kritisch!
-  playsInSilentMode: true,
-  shouldPlayInBackground: false,
-  interruptionMode: 'duckOthers',
+AudioManager.setAudioSessionOptions({
+  iosCategory: 'playAndRecord',  // ⭐ Kritisch!
+  iosMode: 'measurement',
+  iosOptions: ['defaultToSpeaker', 'allowBluetoothA2DP'],
+  iosNotifyOthersOnDeactivation: true,
 });
-await stream.start();
+recorder.start();
 ```
 
-**Schlüssel-Learning:** Ohne `allowsRecording: true` wird das Mikrofon nicht aktiviert, selbst wenn der Stream läuft.
+**Schlüssel-Learning:** Ohne `iosCategory: 'playAndRecord'` wird das Mikrofon nicht aktiviert, selbst wenn der Recorder läuft.
 
 ---
 
@@ -107,11 +107,11 @@ if (result.isStable) {
 
 ---
 
-## 6. ⚠️ `useAudioStream` onBuffer Callback
+## 6. ⚠️ `AudioRecorder.onAudioReady` Callback
 
-**Pitfall:** Die `onBuffer` Option im `useAudioStream` Hook funktioniert nur, wenn der Hook intern den `stream.addListener(AUDIO_STREAM_BUFFER, ...)` registriert (was er tut, laut Quellcode). Wenn keine Buffer ankommen, liegt das Problem **nicht** am Callback, sondern am Audio-Modus oder an fehlenden Berechtigungen.
+**Pitfall:** Die `onAudioReady` Methode von `react-native-audio-api` liefert nur dann Audio-Buffer, wenn die Audio-Session korreriert konfiguriert ist. Wenn keine Buffer ankommen, liegt das Problem **nicht** am Callback, sondern an der fehlenden Audio-Session-Konfiguration oder an fehlenden Berechtigungen.
 
-**Schlüssel-Learning:** Erst Audio-Modus (`setAudioModeAsync`) und Berechtigungen prüfen, bevor man den Callback-Mechanismus verdächtigt.
+**Schlüssel-Learning:** Erst Audio-Session (`AudioManager.setAudioSessionOptions`) und Berechtigungen prüfen, bevor man den Callback-Mechanismus verdächtigt.
 
 ---
 
@@ -195,4 +195,4 @@ require('../../assets/fonts/Bravura.otf')
 
 ---
 
-*Zuletzt aktualisiert: 2026-06-26*
+*Zuletzt aktualisiert: 2026-06-27*
