@@ -20,11 +20,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { PitchRing } from "@/components/feedback/pitch-ring";
 import { ResultBanner } from "@/components/feedback/result-banner";
 import {
   PianoKeyboard,
   type KeyboardFeedback,
+  type KeyboardZoomMode,
 } from "@/components/piano-keyboard";
 import { StaffView } from "@/components/staff/staff-view";
 import { ThemedText } from "@/components/themed-text";
@@ -67,6 +67,11 @@ export default function NoteToPianoScreen() {
   const [feedbackVisible, setFeedbackVisible] = useState(false);
   const [feedbackCorrect, setFeedbackCorrect] = useState(false);
   const [feedbackMessage, setFeedbackMessage] = useState("");
+
+  // Keyboard-Zoom: Bei jeder neuen Aufgabe 2 Sekunden alle 88 Tasten zeigen,
+  // danach in den Fokus-Bereich reinzoomen.
+  const [keyboardZoomMode, setKeyboardZoomMode] =
+    useState<KeyboardZoomMode>("overview");
 
   // Refs für Audio-Verarbeitung (Diskret-Logik, kein Re-Render)
   const stabilityRef = useRef<StabilityTracker | null>(null);
@@ -195,7 +200,9 @@ export default function NoteToPianoScreen() {
       const correct = result.correct;
       setFeedbackCorrect(correct);
       setFeedbackMessage(
-        correct ? "Richtig!" : `Gespielt: ${notation.midiToName(detectedMidi)}`,
+        correct
+          ? "Richtig!"
+          : `Gespielt: ${notation.midiToDisplay(detectedMidi, { octaveStyle: "helmholtz" })}`,
       );
       setFeedbackVisible(true);
 
@@ -220,6 +227,17 @@ export default function NoteToPianoScreen() {
   useEffect(() => {
     submitAnswerRef.current = submitAnswer;
   }, [submitAnswer]);
+
+  // ── Neue Aufgabe → Keyboard-Overview (2s) → Focus ──
+  useEffect(() => {
+    if (phase === "asking" && targetMidi !== null) {
+      setKeyboardZoomMode("overview");
+      const timer = setTimeout(() => {
+        setKeyboardZoomMode("focus");
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [phase, targetMidi]);
 
   // ── Neue Aufgabe → Listening starten ──
   useEffect(() => {
@@ -325,10 +343,11 @@ export default function NoteToPianoScreen() {
                   styles.noteBadge,
                   {
                     fontSize: isCompact ? 96 : isExpanded ? 160 : 128,
+                    lineHeight: isCompact ? 115 : isExpanded ? 192 : 154,
                   },
                 ]}
               >
-                {targetName}
+                {targetName || "–"}
               </ThemedText>
               <ThemedText type="small" themeColor="textSecondary">
                 Spiele oder singe diese Note
@@ -352,30 +371,13 @@ export default function NoteToPianoScreen() {
           )}
         </ThemedView>
 
-        {/* Pitch Ring Feedback (liest SharedValues direkt, 0 Re-Renders) */}
-        <View style={styles.pitchRingContainer}>
-          <PitchRing
-            show={phase === "listening" || phase === "feedback"}
-            isDetecting={phase === "listening"}
-            values={values}
-            midiToName={notation.midiToName}
-            resultState={
-              phase === "feedback"
-                ? feedbackCorrect
-                  ? "correct"
-                  : "incorrect"
-                : null
-            }
-          />
-        </View>
-
         {/* Klaviatur */}
         <ThemedView style={styles.keyboardCard}>
           <PianoKeyboard
-            targetMidi={targetMidi}
+            targetMidi={phase === "feedback" ? targetMidi : null}
             feedback={keyboardFeedback}
             interactive={false}
-            zoomMode="focus"
+            zoomMode={keyboardZoomMode}
             focusRange={[effectiveRange.minMidi, effectiveRange.maxMidi]}
           />
         </ThemedView>
@@ -456,10 +458,6 @@ const styles = StyleSheet.create({
   },
   staffHint: {
     textAlign: "center",
-  },
-  pitchRingContainer: {
-    alignItems: "center",
-    paddingVertical: Spacing.two,
   },
   keyboardCard: {
     gap: Spacing.one,

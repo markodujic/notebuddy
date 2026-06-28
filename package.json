@@ -17,7 +17,7 @@
     "expo-router": "~56.2.11",
     "expo-screen-orientation": "~56.0.5",
     "expo-speech-recognition": "^56.0.1",
-    "expo-splash-screen": "^55.0.22",
+    "expo-splash-screen": "~56.0.10",
     "expo-sqlite": "~56.0.5",
     "expo-status-bar": "~56.0.4",
     "expo-symbols": "~56.0.6",
@@ -48,7 +48,11 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "lint": "expo lint",
-    "verify:reanimated": "node ./scripts/verify-reanimated-worklets.js"
+    "verify:reanimated": "node ./scripts/verify-reanimated-worklets.js",
+    "emu": "cmd /c scripts\\start-emulator.bat",
+    "emu:cold": "cmd /c scripts\\start-emulator.bat Medium_Phone_API_36.1 --cold",
+    "android:debug": "cmd /c scripts\\run-android-debug.bat",
+    "audio:copy": "cmd /c scripts\\copy-audio-binaries.bat"
   },
   "private": true
 }
