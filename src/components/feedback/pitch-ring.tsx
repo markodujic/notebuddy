@@ -83,29 +83,32 @@ export const PitchRing = memo(function PitchRing({
     [midiToName],
   );
 
-  // Reagiert nur auf Wechsel der MIDI-Note (nicht pro Frame-Update)
+  // Reagiert nur auf Wechsel der MIDI-Note (nicht pro Frame-Update).
+  // Deps: das einzelne SharedValue (stabile Referenz), nicht das Wrapper-Objekt.
+  const { detectedMidi, volume, stabilityProgress } = values;
   useAnimatedReaction(
-    () => values.detectedMidi.value,
+    () => detectedMidi.value,
     (current, prev) => {
       if (current !== prev) {
         runOnJS(updateNoteName)(current);
       }
     },
-    [values, updateNoteName],
+    [detectedMidi, updateNoteName],
   );
 
-  // Paths & Glow als DerivedValues (UI-Thread, 0 Re-Renders)
+  // Paths & Glow als DerivedValues (UI-Thread, 0 Re-Renders).
+  // Deps: die einzelnen SharedValues (stabil), nicht das Wrapper-Objekt.
   const volumeArc = useDerivedValue(
-    () => arcPath(center, center, radius, values.volume.value),
-    [center, radius, values],
+    () => arcPath(center, center, radius, volume.value),
+    [center, radius, volume],
   );
   const stabilityArc = useDerivedValue(
-    () => arcPath(center, center, radius, values.stabilityProgress.value),
-    [center, radius, values],
+    () => arcPath(center, center, radius, stabilityProgress.value),
+    [center, radius, stabilityProgress],
   );
   const glowOpacity = useDerivedValue(
-    () => (values.stabilityProgress.value > 0.5 ? 1 : 0),
-    [values],
+    () => (stabilityProgress.value > 0.5 ? 1 : 0),
+    [stabilityProgress],
   );
 
   // Farbe je nach Status

@@ -12,12 +12,24 @@
  * Hinweis: Der `PitchFrame`-Typ für Diskret-Logik lebt in `pitch-utils.ts`
  * (klassische Domain-Brücke). Dieser Modul hier ist nur für kontinuierliche Werte.
  *
- * Design: Sämtliche `.value`-Mutationen sind in Methoden dieses Hooks gekapselt
- * (`setSilence`, `setFrame`, `setStabilityProgress`, `reset`). Consumer greifen
- * nie direkt auf `.value` schreibend zu → der React Compiler hat nichts zu
- * meckern (Reanimated-Mutationen sind False-Positives von `react-hooks/immutability`).
+ * Design:
+ * - `.value =` ist die offizielle Reanimated-API und KEIN React-State.
+ *   Die `react-hooks/immutability`-Regel ist hier ein False-Positive → file-level
+ *   eslint-disable.
+ * - Setter sind KEINE Worklets. Sie werden vom JS-Thread (Audio-Callback)
+ *   aufgerufen; `.value =` ist synchron und funktioniert ohne `'worklet'`-Direktive.
+ *   (Früher waren sie als Worklets markiert, was beim Aufruf vom JS-Thread mit
+ *   Objekt-Argumenten wie PitchFrame in Reanimated 4.x/worklets 0.10.x zu
+ *   Problemen führen kann.)
+ * - Setter und API-Objekt sind memoisiert → stabile Referenzen, Consumer
+ *   re-rendern nicht unnötig, DerivedValues/Reactions bleiben stabil.
  */
 
+/* eslint-disable react-hooks/immutability -- SharedValue .value = ist die
+   offizielle Reanimated-API und KEIN React-State. Die Regel ist hier ein
+   bekannter False-Positive. Siehe PITCH-DATAFLOW-PLAN.md. */
+
+import { useCallback, useMemo } from 'react';
 import { useSharedValue } from 'react-native-reanimated';
 
 import { type PitchFrame } from './pitch-utils';
@@ -64,7 +76,10 @@ export type PitchSharedValuesApi = PitchSharedValues & PitchSharedValueSetters;
  *
  * Initialwerte sind "Stille" (volume 0, midi -1, etc.).
  * Consumer (Audio-Engine, Screen) verwenden nur die Setter, niemals direkte
- * `.value`-Mutationen → React-Compiler-kompatibel.
+ * `.value`-Mutationen.
+ *
+ * Setters und API-Objekt sind memoisiert (useCallback/useMemo) → stabile
+ * Referenzen über Renders hinweg.
  */
 export function usePitchSharedValues(): PitchSharedValuesApi {
   const volume = useSharedValue(0);
@@ -74,66 +89,83 @@ export function usePitchSharedValues(): PitchSharedValuesApi {
   const centsOff = useSharedValue(0);
   const stabilityProgress = useSharedValue(0);
 
-  // ⚠️ Reanimated SharedValues werden per `.value =` mutationiert – das ist die
-  // offiziell dokumentierte API und KEIN React-State. Innerhalb von Worklets
-  // (`'worklet'`) greift die `react-hooks/immutability`-Regel ohnehin nicht,
-  // daher ist kein eslint-disable nötig. Die Mutationen sind hier zentral
-  // gekapselt, Consumer greifen nie direkt auf `.value` schreibend zu.
-  const reset = () => {
-    'worklet';
+  const reset = useCallback(() => {
     volume.value = 0;
     clarity.value = 0;
     frequency.value = 0;
     detectedMidi.value = -1;
     centsOff.value = 0;
     stabilityProgress.value = 0;
-  };
+  }, [volume, clarity, frequency, detectedMidi, centsOff, stabilityProgress]);
 
-  const setVolume = (v: number) => {
-    'worklet';
-    volume.value = v;
-  };
+  const setVolume = useCallback(
+    (v: number) => {
+      volume.value = v;
+    },
+    [volume],
+  );
 
-  const setFrame = (frame: PitchFrame) => {
-    'worklet';
-    const midi =
-      frame.frequency > 0
-        ? Math.round(12 * Math.log2(frame.frequency / 440) + 69)
-        : -1;
-    volume.value = Math.min(1, frame.rms / 0.15);
-    clarity.value = frame.clarity;
-    frequency.value = frame.frequency;
-    detectedMidi.value = midi;
-  };
+  const setFrame = useCallback(
+    (frame: PitchFrame) => {
+      const midi =
+        frame.frequency > 0
+          ? Math.round(12 * Math.log2(frame.frequency / 440) + 69)
+          : -1;
+      volume.value = Math.min(1, frame.rms / 0.15);
+      clarity.value = frame.clarity;
+      frequency.value = frame.frequency;
+      detectedMidi.value = midi;
+    },
+    [volume, clarity, frequency, detectedMidi],
+  );
 
-  const setStabilityProgress = (progress: number) => {
-    'worklet';
-    stabilityProgress.value = progress;
-  };
+  const setStabilityProgress = useCallback(
+    (progress: number) => {
+      stabilityProgress.value = progress;
+    },
+    [stabilityProgress],
+  );
 
-  return {
-    volume,
-    clarity,
-    frequency,
-    detectedMidi,
-    centsOff,
-    stabilityProgress,
-    reset,
-    setVolume,
-    setFrame,
-    setStabilityProgress,
-  };
+  // API-Objekt memoisieren → stabile Referenz, Consumer re-rendern nicht unnötig
+  // und useAnimatedReaction/useDerivedValue-Deps bleiben stabil.
+  return useMemo(
+    () => ({
+      volume,
+      clarity,
+      frequency,
+      detectedMidi,
+      centsOff,
+      stabilityProgress,
+      reset,
+      setVolume,
+      setFrame,
+      setStabilityProgress,
+    }),
+    [
+      volume,
+      clarity,
+      frequency,
+      detectedMidi,
+      centsOff,
+      stabilityProgress,
+      reset,
+      setVolume,
+      setFrame,
+      setStabilityProgress,
+    ],
+  );
 }
+
+/* eslint-enable react-hooks/immutability */
 
 /**
  * Hilfsfunktion: Cents-Abweichung zwischen erkannter Frequenz und Ziel-MIDI.
- * Rein numerisch (worklet-safe). Gibt 0 zurück bei Stille (freq <= 0).
+ * Rein numerisch. Gibt 0 zurück bei Stille (freq <= 0).
  */
 export function centsOffFromFrequency(
   frequency: number,
   targetMidi: number,
 ): number {
-  'worklet';
   if (frequency <= 0) return 0;
   const targetFreq = 440 * Math.pow(2, (targetMidi - 69) / 12);
   return 1200 * Math.log2(frequency / targetFreq);
