@@ -219,12 +219,16 @@ export default function NoteToPianoScreen() {
     }
   }, [phase, targetMidi, audio, values]);
 
-  // ── Cleanup ──
+  // ── Cleanup (nur Unmount, nicht pro Render) ──
+  // `audio` ist jetzt memoisiert (useMemo in useAudioEngine), aber defensiv
+  // auf [] setzen, damit der Cleanup nie versehentlich bei Re-Renders feuert
+  // und das Mikrofon stoppt. stopListening ist stabil (useCallback, []-Deps).
+  const { stopListening } = audio;
   useEffect(() => {
     return () => {
-      audio.stopListening();
+      stopListening();
     };
-  }, [audio]);
+  }, [stopListening]);
 
   // ── Session starten beim ersten Mount ──
   useEffect(() => {

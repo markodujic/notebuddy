@@ -17,7 +17,7 @@
  * via `runOnJS` kommunizieren sollte – niemals `setState` pro Frame.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AudioManager, AudioRecorder } from 'react-native-audio-api';
 
 import {
@@ -219,10 +219,17 @@ export function useAudioEngine(
     };
   }, []);
 
-  return {
-    startListening,
-    stopListening,
-    resetDetector,
-    isStreaming,
-  };
+  // WICHTIG: Rückgabe memoisieren! Consumer haben Cleanup-Effekte wie
+  // `useEffect(() => () => audio.stopListening(), [audio])`. Ohne useMemo wäre
+  // `audio` bei jedem Render eine neue Referenz → Cleanup feuert bei jedem Render
+  // → Mikrofon wird sofort wieder gestoppt (Bug: "Mikro geht nach ~2s aus").
+  return useMemo(
+    () => ({
+      startListening,
+      stopListening,
+      resetDetector,
+      isStreaming,
+    }),
+    [startListening, stopListening, resetDetector, isStreaming],
+  );
 }
