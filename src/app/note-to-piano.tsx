@@ -22,6 +22,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ResultBanner } from "@/components/feedback/result-banner";
 import {
+  KEYBOARD_ZOOM_DURATION_MS,
   PianoKeyboard,
   type KeyboardFeedback,
   type KeyboardZoomMode,
@@ -30,7 +31,12 @@ import { StaffView } from "@/components/staff/staff-view";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { BottomTabInset, MaxContentWidth, Spacing } from "@/constants/theme";
-import { LEARNING_CONFIG, getNotation, matchesNote } from "@/domain";
+import {
+  LEARNING_CONFIG,
+  RMS_GATE_THRESHOLD,
+  getNotation,
+  matchesNote,
+} from "@/domain";
 import { useBreakpoint } from "@/hooks/use-breakpoint";
 import { useTheme } from "@/hooks/use-theme";
 import { useAudioEngine } from "@/services/audio-engine";
@@ -67,6 +73,8 @@ export default function NoteToPianoScreen() {
   const [feedbackVisible, setFeedbackVisible] = useState(false);
   const [feedbackCorrect, setFeedbackCorrect] = useState(false);
   const [feedbackMessage, setFeedbackMessage] = useState("");
+  // Falsch gespielte Note (für rote Tasten-Markierung bei falscher Antwort)
+  const [wrongMidi, setWrongMidi] = useState<number | null>(null);
 
   // Keyboard-Zoom: Bei jeder neuen Aufgabe 2 Sekunden alle 88 Tasten zeigen,
   // danach in den Fokus-Bereich reinzoomen.
@@ -122,7 +130,7 @@ export default function NoteToPianoScreen() {
       // Vor dem ersten Pitch müssen ~50ms Stille erkannt werden,
       // um Carry-Over von der vorherigen Antwort zu verhindern.
       if (!silenceGatePassedRef.current) {
-        if (frame.frequency === 0 || frame.rms < 0.01) {
+        if (frame.frequency === 0 || frame.rms < RMS_GATE_THRESHOLD) {
           gateSilenceCountRef.current += 1;
           if (gateSilenceCountRef.current >= SILENCE_GATE_FRAMES) {
             silenceGatePassedRef.current = true;
@@ -199,6 +207,7 @@ export default function NoteToPianoScreen() {
 
       const correct = result.correct;
       setFeedbackCorrect(correct);
+      setWrongMidi(correct ? null : detectedMidi);
       setFeedbackMessage(
         correct
           ? "Richtig!"
@@ -228,34 +237,42 @@ export default function NoteToPianoScreen() {
     submitAnswerRef.current = submitAnswer;
   }, [submitAnswer]);
 
-  // ── Neue Aufgabe → Keyboard-Overview (2s) → Focus ──
+  // ── Neue Aufgabe → Koordinierte Timeline ──
+  // t=0:            Keyboard = Overview (alle 88 Tasten), Refs reset
+  // t=2000ms:       Keyboard = Focus → Zoom-Animation startet
+  // t=2000ms+ZOOM:  Listening aktivieren (Mikrofon + Pitch-Detection)
+  const OVERVIEW_DURATION_MS = 2000;
+
   useEffect(() => {
-    if (phase === "asking" && targetMidi !== null) {
-      setKeyboardZoomMode("overview");
-      const timer = setTimeout(() => {
-        setKeyboardZoomMode("focus");
-      }, 2000);
-      return () => clearTimeout(timer);
-    }
-  }, [phase, targetMidi]);
+    if (phase !== "asking" || targetMidi === null) return;
 
-  // ── Neue Aufgabe → Listening starten ──
-  useEffect(() => {
-    if (phase === "asking" && targetMidi !== null) {
-      isAnsweringRef.current = false;
-      silenceFramesRef.current = 0;
-      silenceGatePassedRef.current = false;
-      gateSilenceCountRef.current = 0;
-      stabilityRef.current = null;
-      values.reset();
+    // Refs/values resetten
+    isAnsweringRef.current = false;
+    silenceFramesRef.current = 0;
+    silenceGatePassedRef.current = false;
+    gateSilenceCountRef.current = 0;
+    stabilityRef.current = null;
+    values.reset();
+    setWrongMidi(null);
 
-      const timer = setTimeout(() => {
-        setPhase("listening");
-        audio.startListening();
-      }, 300);
+    // Keyboard = Overview (alle 88 Tasten)
+    setKeyboardZoomMode("overview");
 
-      return () => clearTimeout(timer);
-    }
+    // t=2000ms: Focus → Zoom-Animation startet
+    const focusTimer = setTimeout(() => {
+      setKeyboardZoomMode("focus");
+    }, OVERVIEW_DURATION_MS);
+
+    // t=2000ms+ZOOM: Listening aktivieren (erst nach Abschluss des Zooms)
+    const listenTimer = setTimeout(() => {
+      setPhase("listening");
+      audio.startListening();
+    }, OVERVIEW_DURATION_MS + KEYBOARD_ZOOM_DURATION_MS);
+
+    return () => {
+      clearTimeout(focusTimer);
+      clearTimeout(listenTimer);
+    };
   }, [phase, targetMidi, audio, values]);
 
   // ── Cleanup (nur Unmount, nicht pro Render) ──
@@ -375,6 +392,7 @@ export default function NoteToPianoScreen() {
         <ThemedView style={styles.keyboardCard}>
           <PianoKeyboard
             targetMidi={phase === "feedback" ? targetMidi : null}
+            wrongMidi={phase === "feedback" ? wrongMidi : null}
             feedback={keyboardFeedback}
             interactive={false}
             zoomMode={keyboardZoomMode}

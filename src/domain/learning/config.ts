@@ -50,8 +50,11 @@ export const TUTORIAL_WARMUP_MS = 500;
 /** Silence-Gate: Anzahl Stille-Frames vor neuem Ton. */
 export const SILENCE_GATE_FRAMES = 5;
 
-/** RMS-Schwellenwert für Rauschunterdrückung. */
-export const RMS_GATE_THRESHOLD = 0.003;
+/** RMS-Schwellenwert für Rauschunterdrückung.
+ *  Frames unter diesem Wert gelten als Stille (keine Pitch-Detection).
+ *  0.015 ≈ -36 dBFS – filtert typische Raumgeräusche, aber erfasst
+ *  noch leises Singen/Spielen. */
+export const RMS_GATE_THRESHOLD = 0.015;
 
 /** Clarity-Schwellenwert für Pitch-Qualität. */
 export const CLARITY_THRESHOLD = 0.75;

@@ -4,7 +4,7 @@ import {
   LayoutChangeEvent,
   Pressable,
   StyleSheet,
-  useWindowDimensions
+  useWindowDimensions,
 } from "react-native";
 import Animated, {
   Easing,
@@ -42,6 +42,8 @@ type PianoKeyboardProps = {
   // ── Neue Props (rückwärtskompatibel) ──
   /** Zielnote (MIDI) – gold/pulsierend. */
   targetMidi?: number | null;
+  /** Falsch gespielte Note (MIDI) – rot. */
+  wrongMidi?: number | null;
   /** Hervorgehobene Note (MIDI). */
   highlightMidi?: number | null;
   /** Feedback für die Zielnote. */
@@ -56,7 +58,11 @@ type PianoKeyboardProps = {
 
 const DEFAULT_START_MIDI = 21;
 const DEFAULT_END_MIDI = 108;
-const KEYBOARD_ZOOM_DURATION_MS = 900;
+
+/** Dauer der Zoom-Animation in ms – vom Screen genutzt, um Listening
+ *  erst nach Abschluss des Zooms zu aktivieren (Single Source of Truth). */
+export const KEYBOARD_ZOOM_DURATION_MS = 900;
+
 const VIEWPORT_PADDING = 12;
 /** Real piano white-key ratio: height / width ≈ 6 */
 const KEY_ASPECT_RATIO = 6;
@@ -78,7 +84,12 @@ function makeDefaultKeys(): PianoKey[] {
   return result;
 }
 
-function resolveKeyFill(key: PianoKey, isBlackKey: boolean, dimmed: boolean) {
+function resolveKeyFill(
+  key: PianoKey,
+  isBlackKey: boolean,
+  dimmed: boolean,
+  inRange: boolean,
+) {
   const state = key.state ?? "idle";
 
   // Active feedback states always win, even outside the focus range
@@ -88,6 +99,11 @@ function resolveKeyFill(key: PianoKey, isBlackKey: boolean, dimmed: boolean) {
 
   // Keys outside the focus range are greyed out
   if (dimmed) return isBlackKey ? "#4a4a55" : "#c8c8cc";
+
+  // Range highlight: subtle violet tint to show the active range
+  // (visible in ALL zoom modes, including overview)
+  if (inRange && !isBlackKey) return "#ede9fe";
+  if (inRange && isBlackKey) return "#3b2a5c";
 
   // Normal idle fill
   return isBlackKey ? "#1f1f28" : "#f8f7f4";
@@ -155,6 +171,7 @@ export function PianoKeyboard({
   onKeyPress,
   onZoomModeChange,
   targetMidi,
+  wrongMidi,
   highlightMidi,
   feedback,
   keyLabels,
@@ -173,6 +190,8 @@ export function PianoKeyboard({
     const hasNewProps =
       targetMidi !== undefined ||
       targetMidi !== null ||
+      wrongMidi !== undefined ||
+      wrongMidi !== null ||
       highlightMidi !== undefined ||
       highlightMidi !== null ||
       feedback !== undefined ||
@@ -190,19 +209,37 @@ export function PianoKeyboard({
       ) {
         state = "focused";
       }
+      // Falsch gespielte Note → rot
+      if (
+        wrongMidi !== null &&
+        wrongMidi !== undefined &&
+        key.midi === wrongMidi
+      ) {
+        state = "wrong";
+      }
+      // Zielnote: bei falscher Antwort grün (richtig), sonst gold/feedback
       if (
         targetMidi !== null &&
         targetMidi !== undefined &&
         key.midi === targetMidi
       ) {
         if (feedback === "correct") state = "correct";
-        else if (feedback === "incorrect") state = "wrong";
+        else if (feedback === "incorrect")
+          state = "correct"; // grün = richtige Lösung
         else state = "current";
       }
       const note = keyLabels?.[key.midi] ?? key.note;
       return { ...key, state, note };
     });
-  }, [keys, targetMidi, highlightMidi, feedback, greenKeys, keyLabels]);
+  }, [
+    keys,
+    targetMidi,
+    wrongMidi,
+    highlightMidi,
+    feedback,
+    greenKeys,
+    keyLabels,
+  ]);
 
   const whiteKeys = useMemo(
     () => keyboardKeys.filter((key) => !key.isBlack),
@@ -222,11 +259,17 @@ export function PianoKeyboard({
   const pianoHeight = naturalWhiteKeyWidth * KEY_ASPECT_RATIO;
   const blackKeyHeight = pianoHeight * 0.62;
 
+  // Whether a key lies inside the active focus range
+  const isInFocusRange = (midi: number) =>
+    focusRange ? midi >= focusRange[0] && midi <= focusRange[1] : true;
+
   // Whether a key lies outside the active focus range (→ greyed out)
   const isDimmed = (midi: number) =>
-    zoomMode !== "overview" && focusRange
-      ? !(midi >= focusRange[0] && midi <= focusRange[1])
-      : false;
+    zoomMode !== "overview" && focusRange ? !isInFocusRange(midi) : false;
+
+  // Range highlight is visible in ALL zoom modes (including overview)
+  const isInRange = (midi: number) =>
+    focusRange ? midi >= focusRange[0] && midi <= focusRange[1] : false;
 
   // ── Three-stage scale system ──────────────────────────────────────────
   const overviewScale =
@@ -341,7 +384,12 @@ export function PianoKeyboard({
                   width={keyWidth}
                   height={pianoHeight}
                   r={2}
-                  color={resolveKeyFill(key, false, isDimmed(key.midi))}
+                  color={resolveKeyFill(
+                    key,
+                    false,
+                    isDimmed(key.midi),
+                    isInRange(key.midi),
+                  )}
                 />
                 <RoundedRect
                   x={index * keyWidth}
@@ -382,7 +430,12 @@ export function PianoKeyboard({
                   width={blackKeyWidth}
                   height={blackKeyHeight}
                   r={1.5}
-                  color={resolveKeyFill(key, true, isDimmed(key.midi))}
+                  color={resolveKeyFill(
+                    key,
+                    true,
+                    isDimmed(key.midi),
+                    isInRange(key.midi),
+                  )}
                 />
               );
             })}
