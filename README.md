@@ -1,56 +1,68 @@
-# Welcome to your Expo app 👋
+# notebuddy 👋
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Ear-training / note-learning app built with **Expo SDK 56** (React Native 0.85), Reanimated 4, Skia, and `react-native-audio-api` for live pitch detection. Ported from a Svelte reference app.
 
-## Get started
+## Tech stack
 
-1. Install dependencies
+- **Expo SDK 56** · React Native 0.85 · React 19 · TypeScript
+- **Audio:** `react-native-audio-api` (recording + autocorrelation pitch detection), `expo-speech-recognition`
+- **Graphics/Animation:** `@shopify/react-native-skia`, `react-native-reanimated` 4, `react-native-worklets`, `react-native-svg`, `vexflow`
+- **State:** `zustand` · **Persistenz:** `expo-sqlite`
+- **Routing:** `expo-router` (NativeTabs)
 
-   ```bash
-   npm install
-   ```
+## Setup
 
-2. Start the app
+```bash
+npx expo install react-native-reanimated react-native-worklets   # native Animation-Libs (offiziell)
+npm install
+```
 
-   ```bash
-   npx expo start
-   ```
+> Reanimated + Worklets brauchen einen **Dev-Build** (nicht Expo Go). Keine Patches/Postinstall-Hooks
+> nötig – siehe `REANIMATED-WORKLETS-SETUP.md` und `PITFALLS.md #18` (veraltetes Paar = häufigste Build-Fehlerursache; `.npmrc` mit `legacy-peer-deps=true` wird benötigt).
 
-In the output, you'll find options to open the app in a
+## Development
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+```bash
+npx expo start --dev-client
+```
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+You need a **development build** (native audio/skia/speech modules can't run in Expo Go).
+
+### iOS EAS Dev-Build (standard workflow)
+
+```bash
+node ./scripts/verify-reanimated-worklets.js     # Pre-Flight-Check (must be green)
+eas build --profile development --platform ios
+```
+
+## Project docs
+
+| File | Content |
+|------|---------|
+| `architecture.md` | Target architecture (audio ⇄ graphics decoupling) |
+| `PLAN.md` | Implementation plan & phases |
+| `PITFALLS.md` | Known pitfalls & lessons learned |
+| `DEBUGGING` | Debugging log of past issues |
+| `REANIMATED-WORKLETS-SETUP.md` | Reanimated + Worklets setup & dev-build checklist |
+
+## Troubleshooting build / install issues
+
+- `npm install` / `expo install` fail with `ERESOLVE could not resolve` (react/react-dom) → create `.npmrc` with `legacy-peer-deps=true` → `PITFALLS.md #18`
+- `expo config --json` / `prebuild` crash (`pngjs/lib/png.js` missing) → `PITFALLS.md #14`
+- `npm install` fails with `Invalid Version:` → delete `package-lock.json` too → `PITFALLS.md #15`
+- `rnworklets/rnworklets.h file not found` (iOS) → upgrade to `reanimated ^4.5.0` ↔ `worklets ^0.10.0` → `PITFALLS.md #18` (✅ verifiziert 2026-06-28)
+- Reanimated/Worklets setup → **offizieller Weg, keine Patches**: `REANIMATED-WORKLETS-SETUP.md` / `PITFALLS.md #18`
+
+Verify-Check: `npm run verify:reanimated`.
 
 ## Get a fresh project
-
-When you're ready, run:
 
 ```bash
 npm run reset-project
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
-
-### Other setup steps
-
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
-
 ## Learn more
 
-To learn more about developing your project with Expo, look at the following resources:
-
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+- [Expo documentation](https://docs.expo.dev/)
+- [Development builds](https://docs.expo.dev/develop/development-builds/introduction/)
+- [Expo Router](https://docs.expo.dev/router/introduction)

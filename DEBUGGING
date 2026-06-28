@@ -178,4 +178,40 @@ eas build --profile development --platform ios
 
 ---
 
-*Zuletzt aktualisiert: 2026-06-26*
+## 11. ⭐ `expo config` crash – `pngjs/lib/png.js` fehlt
+
+**Symptom:** `expo prebuild` / `expo config --json` bricht ab:
+```
+expo config --json exited with non-zero code: 1
+PluginError: Cannot find module '.../node_modules/pngjs/lib/png.js'
+```
+
+**Ursache:** `pngjs` (via `expo-splash-screen → @expo/image-utils → parse-png`) war nur teilweise entpackt – Ordner da, aber `lib/` fehlte. Folge einer abgebrochenen `npm install`-Installation.
+
+**Lösung:** Vollständiger Reset (`rmdir /s /q node_modules` + `del package-lock.json` + `npm cache clean --force`) und saubere Neuinstallation. Siehe `REANIMATED-WORKLETS-SETUP.md`.
+
+---
+
+## 12. ⭐ npm `Invalid Version:` – `npm install` bricht komplett ab
+
+**Symptom:** Jedes `npm install` crasht:
+```
+npm error Invalid Version:
+TypeError: Invalid Version:  at new SemVer ... at Node.canDedupe
+```
+
+**Ursache:** npm-v11-Dedupe-Bug bei inkonsistentem Zustand zwischen `node_modules` und `package-lock.json` (nach abgebrochenen Installationen). Reproduzierbar beim Versuch, das fehlende `pngjs` per `npm install pngjs` nachzuinstallieren.
+
+**Lösung:** `package-lock.json` löschen (der Schlüssel gegen den Bug!) + `node_modules` + Cache, dann neu installieren. Siehe `PITFALLS.md #15` und `REANIMATED-WORKLETS-SETUP.md`.
+
+---
+
+## 13. ⭐ Reanimated + Worklets Pre-Flight-Check etabliert
+
+**Symptom:** iOS-Build bricht am Worklets-Header / Codegen-Spec-Namen ab, schwer vorhersehbar.
+
+**Lösung:** Vor jedem Dev-Build läuft `node ./scripts/verify-reanimated-worklets.js` (prüft reanimated vollständig + Plugin, worklets, Versions-Paar, Patch angewendet). Vollständige Anleitung in `REANIMATED-WORKLETS-SETUP.md`.
+
+---
+
+*Zuletzt aktualisiert: 2026-06-27*

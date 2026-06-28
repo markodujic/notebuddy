@@ -29,3 +29,9 @@ Ziel ist, dass Audio und UI jeweils mit maximaler Performance und möglichst wen
 
 ## Dev-Build Pflicht
 Änderungen an nativen Konfigurationen (app.json, Info.plist, AndroidManifest, Permissions, neue native Dependencies) erfordern immer einen **neuen Dev-Build**. JS-only Änderungen reichen für ein OTA-Update, native Änderungen müssen neu gebaut werden. Der Agent muss den User aktiv informieren, wenn ein neuer Build nötig ist.
+
+**Vor jedem Dev-Build** den Verify-Check laufen lassen:
+```bash
+npm run verify:reanimated
+```
+Erst bei `✅ Alles ok` bauen. Setup-Anleitung in `REANIMATED-WORKLETS-SETUP.md` (offizieller Weg, **keine Patches**). Bei `expo config`-/`prebuild`-Abbrüchen oder `npm install` `Invalid Version`-Fehlern → `PITFALLS.md #14`/`#15` (vollständiger Reset + offizielles `expo install`, niemals Quelldateien von Abhängigkeiten patchen). Bei iOS `rnworklets.h file not found` → `PITFALLS.md #18` (veraltetes reanimated/worklets-Paar → Upgrade auf `^4.5.0`/`^0.10.0`, `.npmrc` mit `legacy-peer-deps=true` nötig).
