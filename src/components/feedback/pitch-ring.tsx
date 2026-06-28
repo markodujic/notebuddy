@@ -1,30 +1,38 @@
 /**
- * PitchRing – Skia Ring für Pitch-Detection-Feedback.
+ * PitchRing – Skia Ring für Pitch-Detection-Feedback (Stufe A: SharedValue-Consumer).
  *
- * Visualisiert:
+ * Visualisiert (alles auf UI-Thread, 0 Re-Renders pro Frame):
  *   - Stabilitäts-Ring (Fortschritt 0→1, grün/rot)
  *   - Volume-Ring (orange, hinter Stabilität)
  *   - Glow bei >50% Stabilität
  *   - Result-Icon (✓/✗) im Zentrum
+ *
+ * Liest kontinuierliche Werte direkt aus `values` (SharedValues) via
+ * `useDerivedValue`. Text-Update (Notenname) nur bei MIDI-Wechsel über
+ * `useAnimatedReaction` + `runOnJS` (selten, kein Frame-Overhead).
  */
 
 import { Canvas, Circle, Path } from '@shopify/react-native-skia';
-import { memo, useMemo } from 'react';
+import { memo, useCallback, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
+import {
+  runOnJS,
+  useAnimatedReaction,
+  useDerivedValue,
+} from 'react-native-reanimated';
 
 import { ThemedText } from '@/components/themed-text';
+import type { PitchSharedValues } from '@/services/pitch-shared-values';
 
 export interface PitchRingProps {
   /** Anzeigen? */
   show: boolean;
   /** Wird gerade erkannt? */
   isDetecting: boolean;
-  /** Erkannte Note (Text). */
-  detectedNote?: string;
-  /** Stabilitäts-Fortschritt 0–1. */
-  stabilityProgress: number;
-  /** Volume 0–1. */
-  volume: number;
+  /** SharedValues (volume, stabilityProgress, detectedMidi, ...). */
+  values: PitchSharedValues;
+  /** Wandelt MIDI in Anzeige-Text um (z.B. Notation-System). */
+  midiToName?: (midi: number) => string;
   /** Ergebnis-Status. */
   resultState?: 'correct' | 'incorrect' | null;
   /** Ergebnis-Message. */
@@ -33,15 +41,14 @@ export interface PitchRingProps {
   size?: number;
 }
 
-/** Baut einen SVG-Arc-Path für einen Kreis-Ring-Segment. */
+/** Baut einen SVG-Arc-Path für einen Kreis-Ring-Segment (worklet-safe, rein). */
 function arcPath(cx: number, cy: number, radius: number, sweepFraction: number): string {
+  'worklet';
   if (sweepFraction <= 0) return '';
   if (sweepFraction >= 1) {
-    // Vollkreis als zwei Halbkreise
     return `M ${cx - radius} ${cy} A ${radius} ${radius} 0 1 1 ${cx + radius} ${cy} A ${radius} ${radius} 0 1 1 ${cx - radius} ${cy}`;
   }
   const sweepRad = sweepFraction * 2 * Math.PI;
-  // Start oben (-90°), im Uhrzeigersinn
   const startX = cx + radius * Math.cos(-Math.PI / 2);
   const startY = cy + radius * Math.sin(-Math.PI / 2);
   const endX = cx + radius * Math.cos(-Math.PI / 2 + sweepRad);
@@ -53,9 +60,8 @@ function arcPath(cx: number, cy: number, radius: number, sweepFraction: number):
 export const PitchRing = memo(function PitchRing({
   show,
   isDetecting,
-  detectedNote,
-  stabilityProgress,
-  volume,
+  values,
+  midiToName,
   resultState,
   resultMessage,
   size = 160,
@@ -64,20 +70,45 @@ export const PitchRing = memo(function PitchRing({
   const radius = size / 2 - 12;
   const strokeWidth = 8;
 
-  // Paths für Volume und Stabilität
-  const volumeArc = useMemo(
-    () => arcPath(center, center, radius, volume),
-    [center, radius, volume],
-  );
-  const stabilityArc = useMemo(
-    () => arcPath(center, center, radius, stabilityProgress),
-    [center, radius, stabilityProgress],
+  // Notenname nur bei MIDI-Wechsel updaten (selten, via runOnJS)
+  const [noteName, setNoteName] = useState('');
+  const updateNoteName = useCallback(
+    (midi: number) => {
+      if (!midiToName || midi < 0) {
+        setNoteName('');
+        return;
+      }
+      setNoteName(midiToName(midi));
+    },
+    [midiToName],
   );
 
-  // Glow bei hoher Stabilität
-  const showGlow = useMemo(() => stabilityProgress > 0.5, [stabilityProgress]);
+  // Reagiert nur auf Wechsel der MIDI-Note (nicht pro Frame-Update)
+  useAnimatedReaction(
+    () => values.detectedMidi.value,
+    (current, prev) => {
+      if (current !== prev) {
+        runOnJS(updateNoteName)(current);
+      }
+    },
+    [values, updateNoteName],
+  );
 
-  // Farben je nach Status
+  // Paths & Glow als DerivedValues (UI-Thread, 0 Re-Renders)
+  const volumeArc = useDerivedValue(
+    () => arcPath(center, center, radius, values.volume.value),
+    [center, radius, values],
+  );
+  const stabilityArc = useDerivedValue(
+    () => arcPath(center, center, radius, values.stabilityProgress.value),
+    [center, radius, values],
+  );
+  const glowOpacity = useDerivedValue(
+    () => (values.stabilityProgress.value > 0.5 ? 1 : 0),
+    [values],
+  );
+
+  // Farbe je nach Status
   const stabilityColor = resultState === 'incorrect' ? '#ef4444' : '#22c55e';
 
   if (!show) return null;
@@ -85,17 +116,16 @@ export const PitchRing = memo(function PitchRing({
   return (
     <View style={[styles.container, { width: size, height: size }]}>
       <Canvas style={{ width: size, height: size }}>
-        {/* Glow bei hoher Stabilität */}
-        {showGlow && (
-          <Circle
-            cx={center}
-            cy={center}
-            r={radius + 4}
-            color="rgba(34,197,94,0.2)"
-            strokeWidth={strokeWidth + 8}
-            style="stroke"
-          />
-        )}
+        {/* Glow bei hoher Stabilität (opacity-gesteuert, kein Conditional-Render) */}
+        <Circle
+          cx={center}
+          cy={center}
+          r={radius + 4}
+          color="rgba(34,197,94,0.2)"
+          strokeWidth={strokeWidth + 8}
+          style="stroke"
+          opacity={glowOpacity}
+        />
 
         {/* Hintergrund-Ring */}
         <Circle
@@ -108,26 +138,22 @@ export const PitchRing = memo(function PitchRing({
         />
 
         {/* Volume-Ring (orange) */}
-        {volumeArc ? (
-          <Path
-            path={volumeArc}
-            color="rgba(249,115,22,0.6)"
-            strokeWidth={strokeWidth - 2}
-            style="stroke"
-            strokeCap="round"
-          />
-        ) : null}
+        <Path
+          path={volumeArc}
+          color="rgba(249,115,22,0.6)"
+          strokeWidth={strokeWidth - 2}
+          style="stroke"
+          strokeCap="round"
+        />
 
         {/* Stabilitäts-Ring (grün/rot) */}
-        {stabilityArc ? (
-          <Path
-            path={stabilityArc}
-            color={stabilityColor}
-            strokeWidth={strokeWidth}
-            style="stroke"
-            strokeCap="round"
-          />
-        ) : null}
+        <Path
+          path={stabilityArc}
+          color={stabilityColor}
+          strokeWidth={strokeWidth}
+          style="stroke"
+          strokeCap="round"
+        />
       </Canvas>
 
       {/* Zentrum: Note oder Result-Icon */}
@@ -136,8 +162,8 @@ export const PitchRing = memo(function PitchRing({
           <ThemedText type="title" style={{ color: '#22c55e' }}>✓</ThemedText>
         ) : resultState === 'incorrect' ? (
           <ThemedText type="title" style={{ color: '#ef4444' }}>✗</ThemedText>
-        ) : isDetecting && detectedNote ? (
-          <ThemedText type="subtitle">{detectedNote}</ThemedText>
+        ) : isDetecting && noteName ? (
+          <ThemedText type="subtitle">{noteName}</ThemedText>
         ) : (
           <ThemedText type="small" style={{ opacity: 0.5 }}>
             {resultMessage ?? 'Höre zu…'}

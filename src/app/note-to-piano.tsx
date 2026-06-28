@@ -9,8 +9,11 @@
  *   5. Bewertung → Feedback
  *   6. Nächste Aufgabe
  *
- * ⚠️ WICHTIG: Audio-Verarbeitung läuft in Refs (kein Re-Render pro Frame).
- * Die UI entscheidet selbst, ob/wann sie re-rendert.
+ * ⚠️ Architektur (Stufe A, siehe PITCH-DATAFLOW-PLAN.md):
+ * Kontinuierliche Audio-Werte laufen über SharedValues → 0 Re-Renders pro Frame.
+ * Der Screen re-rendert NUR bei echten Phasen-Wechseln (asking→listening→feedback→done),
+ * nicht mehr 60×/Sekunde. Stability-Progress und Volume sind in SharedValues,
+ * `handleAudioFrame` macht nur noch Diskret-Logik (Stability-Tracking + Submit).
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -28,6 +31,8 @@ import { LEARNING_CONFIG, getNotation, matchesNote } from '@/domain';
 import { useBreakpoint } from '@/hooks/use-breakpoint';
 import { useTheme } from '@/hooks/use-theme';
 import { useAudioEngine } from '@/services/audio-engine';
+import { usePitchSharedValues } from '@/services/pitch-shared-values';
+import { type PitchFrame } from '@/services/pitch-utils';
 import { StabilityTracker } from '@/services/stability-tracker';
 import { useAppStore } from '@/stores/app-store';
 import { useSessionStore } from '@/stores/session-store';
@@ -50,17 +55,17 @@ export default function NoteToPianoScreen() {
   const session = useSessionStore();
   const notation = getNotation(notationSystemId);
 
-  // Local state (UI-spezifisch, nicht im Store)
+  // SharedValues – die zentrale Audio↔UI-Brücke (0 Re-Renders pro Frame)
+  const values = usePitchSharedValues();
+
+  // Local state (nur echte Phasen-Wechsel, nicht pro Frame)
   const [displayMode, setDisplayMode] = useState<DisplayMode>('badge');
   const [phase, setPhase] = useState<ScreenPhase>('asking');
-  const [detectedNote, setDetectedNote] = useState('');
-  const [stabilityProgress, setStabilityProgress] = useState(0);
-  const [volume, setVolume] = useState(0);
   const [feedbackVisible, setFeedbackVisible] = useState(false);
   const [feedbackCorrect, setFeedbackCorrect] = useState(false);
   const [feedbackMessage, setFeedbackMessage] = useState('');
 
-  // Refs für Audio-Verarbeitung (kein Re-Render)
+  // Refs für Audio-Verarbeitung (Diskret-Logik, kein Re-Render)
   const stabilityRef = useRef<StabilityTracker | null>(null);
   const silenceFramesRef = useRef(0);
   const isAnsweringRef = useRef(false);
@@ -90,20 +95,17 @@ export default function NoteToPianoScreen() {
     ((detectedMidi: number, frequency: number) => void) | null
   >(null);
 
-  // ── Audio Callback ──
-  // Stabil (kein Re-Render bei Phase/Target-Änderung).
-  // Liest aktuelle Werte aus Refs.
+  // ── Audio Callback (Diskret-Logik: Stability-Tracking + Submit) ──
+  // Läuft pro Frame, aber kommuniziert NUR über SharedValues und
+  // (selten) submitAnswerRef → KEIN setState pro Frame.
   const handleAudioFrame = useCallback(
-    (frame: { frequency: number; clarity: number; rms: number; timestamp: number }) => {
+    (frame: PitchFrame) => {
       const currentPhase = phaseRef.current;
       const currentTargetMidi = targetMidiRef.current;
 
       if (currentPhase !== 'listening') return;
       if (currentTargetMidi === null) return;
       if (isAnsweringRef.current) return;
-
-      // Volume-Visualisierung (wie alte App: smoothedRms / 0.15)
-      setVolume(Math.min(1, frame.rms / 0.15));
 
       // ── Silence Gate (initial) ──
       // Vor dem ersten Pitch müssen ~50ms Stille erkannt werden,
@@ -125,8 +127,7 @@ export default function NoteToPianoScreen() {
         silenceFramesRef.current += 1;
         if (silenceFramesRef.current >= 5) {
           stabilityRef.current?.reset();
-          setStabilityProgress(0);
-          setDetectedNote('');
+          values.setStabilityProgress(0);
         }
         return;
       }
@@ -135,7 +136,6 @@ export default function NoteToPianoScreen() {
 
       // ── Pitch erkannt ──
       const detectedMidi = Math.round(12 * Math.log2(frame.frequency / 440) + 69);
-      setDetectedNote(notation.midiToName(detectedMidi));
 
       // Stability-Tracker initialisieren falls nötig
       if (!stabilityRef.current) {
@@ -149,7 +149,7 @@ export default function NoteToPianoScreen() {
       // ⭐ KORREKTUR: Stabilität für JEDEN Ton tracken (isMatch immer true),
       // wie die alte App. Erst nach Stability wird geprüft, ob die Note korrekt ist.
       const result = stabilityRef.current.update(detectedMidi, true, frame.timestamp);
-      setStabilityProgress(result.progress);
+      values.setStabilityProgress(result.progress);
 
       // Stabil → erst JETZT correctness prüfen
       if (result.isStable) {
@@ -158,11 +158,11 @@ export default function NoteToPianoScreen() {
         submitAnswerRef.current?.(isCorrect ? currentTargetMidi : detectedMidi, frame.frequency);
       }
     },
-    [toleranceCents, stabilityMs, notation],
+    [toleranceCents, stabilityMs, values],
   );
 
-  // ── Audio Engine ──
-  const audio = useAudioEngine(handleAudioFrame);
+  // ── Audio Engine (schreibt kontinuierliche Werte in SharedValues) ──
+  const audio = useAudioEngine(values, handleAudioFrame);
 
   // ── Antwort einreichen ──
   const submitAnswer = useCallback(
@@ -208,9 +208,7 @@ export default function NoteToPianoScreen() {
       silenceGatePassedRef.current = false;
       gateSilenceCountRef.current = 0;
       stabilityRef.current = null;
-      setStabilityProgress(0);
-      setDetectedNote('');
-      setVolume(0);
+      values.reset();
 
       const timer = setTimeout(() => {
         setPhase('listening');
@@ -219,7 +217,7 @@ export default function NoteToPianoScreen() {
 
       return () => clearTimeout(timer);
     }
-  }, [phase, targetMidi, audio]);
+  }, [phase, targetMidi, audio, values]);
 
   // ── Cleanup ──
   useEffect(() => {
@@ -324,14 +322,13 @@ export default function NoteToPianoScreen() {
           )}
         </ThemedView>
 
-        {/* Pitch Ring Feedback */}
+        {/* Pitch Ring Feedback (liest SharedValues direkt, 0 Re-Renders) */}
         <View style={styles.pitchRingContainer}>
           <PitchRing
             show={phase === 'listening' || phase === 'feedback'}
             isDetecting={phase === 'listening'}
-            detectedNote={detectedNote}
-            stabilityProgress={stabilityProgress}
-            volume={volume}
+            values={values}
+            midiToName={notation.midiToName}
             resultState={phase === 'feedback' ? (feedbackCorrect ? 'correct' : 'incorrect') : null}
           />
         </View>

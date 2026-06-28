@@ -1,12 +1,20 @@
 /**
  * Audio-Engine – Pitch-Detection-Pipeline auf Basis von react-native-audio-api.
  *
- * ⚠️ Architektur: Audio-Verarbeitung passiert in Refs/Callbacks,
- * NICHT im React-Render-Zyklus. Ergebnisse werden via Callbacks emittiert.
- * Die UI entscheidet selbst, ob/wann sie re-rendert (über Stores/Selektoren).
+ * ⚠️ Architektur (Stufe A, siehe PITCH-DATAFLOW-PLAN.md):
+ * Audio-Verarbeitung läuft in Refs (kein React-Render-Zyklus).
+ * Kontinuierliche Werte (volume, clarity, frequency, detectedMidi) werden
+ * PRO FRAME in SharedValues geschrieben → 0 Re-Renders.
  *
  * Pipeline:
- *   AudioRecorder (PCM) → RMS-Gate → PitchDetector → Callback
+ *   AudioRecorder (PCM) → RMS-Gate → PitchDetector → SharedValues + onFrame
+ *
+ * Verwendet ausschließlich die gekapselten Setter von `PitchSharedValuesApi`
+ * (`setFrame`), niemals direkte `.value`-Mutationen → React-Compiler-kompatibel.
+ *
+ * Der optionale `onFrame`-Callback ist für seltene Diskret-Logik (z.B.
+ * Stability-Tracking + Submit), die ihrerseits nur in SharedValues oder
+ * via `runOnJS` kommunizieren sollte – niemals `setState` pro Frame.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -18,9 +26,10 @@ import {
   VOLUME_EMA_FACTOR,
 } from '@/domain';
 import { DEFAULT_BUFFER_SIZE, MacLeodPitchDetector, calculateRMS } from './pitch-detector';
+import type { PitchSharedValuesApi } from './pitch-shared-values';
 import { type PitchFrame, emaSmooth } from './pitch-utils';
 
-/** Callback für jeden verarbeiteten Pitch-Frame. */
+/** Callback für jeden verarbeiteten Pitch-Frame (Diskret-Logik, selten). */
 export type AudioEngineCallback = (frame: PitchFrame) => void;
 
 /** Status der Audio-Engine. */
@@ -32,11 +41,17 @@ export type AudioEngineErrorCallback = (error: Error) => void;
 /**
  * Audio-Engine Hook: Real-time Pitch-Detection aus dem Mikrofon.
  *
- * Audio-Verarbeitung läuft vollständig in Refs – kein Re-Render pro Frame.
- * Ergebnisse werden nur über den `onFrame`-Callback geliefert.
+ * Schreibt kontinuierliche Werte in `values` (SharedValues) – kein Re-Render.
+ * Verwendet ausschließlich die gekapselten Setter → React-Compiler-kompatibel.
+ * `onFrame` wird optional für Diskret-Logik aufgerufen.
+ *
+ * @param values   SharedValues-API (lesen + gekapselte Setter).
+ * @param onFrame  Optionaler Callback für Diskret-Logik (Stability etc.).
+ * @param onError  Optionaler Fehler-Callback.
  */
 export function useAudioEngine(
-  onFrame: AudioEngineCallback,
+  values: PitchSharedValuesApi,
+  onFrame?: AudioEngineCallback,
   onError?: AudioEngineErrorCallback,
 ) {
   const recorderRef = useRef<AudioRecorder | null>(null);
@@ -55,7 +70,11 @@ export function useAudioEngine(
   }, [onError]);
 
   /**
-   * Verarbeitet rohe PCM-Samples: RMS → Pitch-Detection → Callback.
+   * Verarbeitet rohe PCM-Samples: RMS → Pitch-Detection → SharedValues + onFrame.
+   *
+   * Kontinuierliche Werte gehen über den gekapselten Setter `setFrame` in die
+   * SharedValues (UI-Thread liest direkt, 0 Re-Renders).
+   * `onFrame` (falls vorhanden) wird für Diskret-Logik aufgerufen.
    */
   const processSamples = useCallback(
     (samples: Float32Array, sampleRate: number, timestamp: number) => {
@@ -64,13 +83,17 @@ export function useAudioEngine(
         const rms = calculateRMS(samples);
         volumeEmaRef.current = emaSmooth(volumeEmaRef.current, rms, VOLUME_EMA_FACTOR);
 
+        const silenceFrame: PitchFrame = {
+          frequency: 0,
+          clarity: 0,
+          rms: volumeEmaRef.current,
+          timestamp: timestamp * 1000,
+        };
+
         if (rms < RMS_GATE_THRESHOLD) {
-          onFrameRef.current({
-            frequency: 0,
-            clarity: 0,
-            rms: volumeEmaRef.current,
-            timestamp: timestamp * 1000,
-          });
+          // Stille → gekapselter Setter (React-Compiler-safe)
+          values.setFrame(silenceFrame);
+          onFrameRef.current?.(silenceFrame);
           return;
         }
 
@@ -80,19 +103,25 @@ export function useAudioEngine(
 
         const result = detectorRef.current.getPitch(samples);
         const passesGate = result.clarity >= CLARITY_THRESHOLD;
+        const frequency = passesGate ? result.frequency : 0;
 
-        onFrameRef.current({
-          frequency: passesGate ? result.frequency : 0,
+        // Kontinuierliche Werte → gekapselter Setter (UI-Thread, 0 Re-Renders)
+        const frame: PitchFrame = {
+          frequency,
           clarity: result.clarity,
           rms: volumeEmaRef.current,
           timestamp: timestamp * 1000,
-        });
+        };
+        values.setFrame(frame);
+
+        // Diskret-Logik (Stability etc.) – Aufrufer entscheidet über Kommunikation
+        onFrameRef.current?.(frame);
       } catch (err) {
         const error = err instanceof Error ? err : new Error(String(err));
         onErrorRef.current?.(error);
       }
     },
-    [],
+    [values],
   );
 
   // Recorder erst beim Start erstellen (Lazy Init)
