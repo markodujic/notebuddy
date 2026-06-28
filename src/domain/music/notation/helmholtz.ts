@@ -12,10 +12,11 @@
  *   Oktave 7: c′′′′ (Viergestrichen)
  */
 
-import { midiToNoteIndex, midiToScientificOctave } from './types';
+import { midiToNoteIndex, midiToScientificOctave } from "./types";
 
-const PRIMES = ['', '′', '″', '‴', '′′′′'];
-const COMMAS = ['', ',', ',,', ',,,', ',,,,'];
+// Einfache ASCII-Zeichen statt Unicode-Primes für maximale Kompatibilität
+const PRIMES = ["", "'", "''", "'''", "''''"];
+const COMMAS = ["", ",", ",,", ",,,", ",,,,"];
 
 /**
  * Erzeugt die Helmholtz-Bezeichnung für eine MIDI-Nummer.

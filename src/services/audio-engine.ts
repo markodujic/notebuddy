@@ -17,23 +17,27 @@
  * via `runOnJS` kommunizieren sollte – niemals `setState` pro Frame.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AudioManager, AudioRecorder } from 'react-native-audio-api';
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AudioManager, AudioRecorder } from "react-native-audio-api";
 
 import {
   CLARITY_THRESHOLD,
   RMS_GATE_THRESHOLD,
   VOLUME_EMA_FACTOR,
-} from '@/domain';
-import { DEFAULT_BUFFER_SIZE, MacLeodPitchDetector, calculateRMS } from './pitch-detector';
-import type { PitchSharedValuesApi } from './pitch-shared-values';
-import { type PitchFrame, emaSmooth } from './pitch-utils';
+} from "@/domain";
+import {
+  DEFAULT_BUFFER_SIZE,
+  MacLeodPitchDetector,
+  calculateRMS,
+} from "./pitch-detector";
+import type { PitchSharedValuesApi } from "./pitch-shared-values";
+import { type PitchFrame, emaSmooth } from "./pitch-utils";
 
 /** Callback für jeden verarbeiteten Pitch-Frame (Diskret-Logik, selten). */
 export type AudioEngineCallback = (frame: PitchFrame) => void;
 
 /** Status der Audio-Engine. */
-export type AudioEngineStatus = 'idle' | 'requesting' | 'streaming' | 'error';
+export type AudioEngineStatus = "idle" | "requesting" | "streaming" | "error";
 
 /** Fehler-Callback. */
 export type AudioEngineErrorCallback = (error: Error) => void;
@@ -81,13 +85,17 @@ export function useAudioEngine(
       try {
         sampleRateRef.current = sampleRate;
         const rms = calculateRMS(samples);
-        volumeEmaRef.current = emaSmooth(volumeEmaRef.current, rms, VOLUME_EMA_FACTOR);
+        volumeEmaRef.current = emaSmooth(
+          volumeEmaRef.current,
+          rms,
+          VOLUME_EMA_FACTOR,
+        );
 
         const silenceFrame: PitchFrame = {
           frequency: 0,
           clarity: 0,
           rms: volumeEmaRef.current,
-          timestamp: timestamp * 1000,
+          timestamp,
         };
 
         if (rms < RMS_GATE_THRESHOLD) {
@@ -98,19 +106,27 @@ export function useAudioEngine(
         }
 
         if (!detectorRef.current) {
-          detectorRef.current = new MacLeodPitchDetector(DEFAULT_BUFFER_SIZE, sampleRate);
+          detectorRef.current = new MacLeodPitchDetector(
+            DEFAULT_BUFFER_SIZE,
+            sampleRate,
+          );
         }
 
         const result = detectorRef.current.getPitch(samples);
         const passesGate = result.clarity >= CLARITY_THRESHOLD;
-        const frequency = passesGate ? result.frequency : 0;
+        // Filter: Nur Frequenzen im musikalisch nutzbaren Bereich akzeptieren
+        // (verwirft Subharmonische Artefakte wie ~21Hz und Ultraschall).
+        const frequency =
+          passesGate && result.frequency >= 50 && result.frequency <= 2000
+            ? result.frequency
+            : 0;
 
         // Kontinuierliche Werte → gekapselter Setter (UI-Thread, 0 Re-Renders)
         const frame: PitchFrame = {
           frequency,
           clarity: result.clarity,
           rms: volumeEmaRef.current,
-          timestamp: timestamp * 1000,
+          timestamp,
         };
         values.setFrame(frame);
 
@@ -137,7 +153,13 @@ export function useAudioEngine(
         },
         (event) => {
           const samples = event.buffer.getChannelData(0);
-          processSamples(samples, event.buffer.sampleRate, event.when);
+          // event.when kann auf manchen Plattformen undefined/NaN sein.
+          // Fallback auf performance.now() (monoton, ms).
+          const ts =
+            typeof event.when === "number" && !Number.isNaN(event.when)
+              ? event.when
+              : performance.now();
+          processSamples(samples, event.buffer.sampleRate, ts);
         },
       );
 
@@ -157,17 +179,17 @@ export function useAudioEngine(
     try {
       // 1. Berechtigung anfordern
       const permission = await AudioManager.requestRecordingPermissions();
-      if (permission !== 'Granted') {
-        onErrorRef.current?.(new Error('Mikrofon-Berechtigung verweigert'));
+      if (permission !== "Granted") {
+        onErrorRef.current?.(new Error("Mikrofon-Berechtigung verweigert"));
         return;
       }
 
       // 2. Audio-Session konfigurieren (iOS)
       // WICHTIG: playAndRecord für Aufnahme + ggf. Wiedergabe
       AudioManager.setAudioSessionOptions({
-        iosCategory: 'playAndRecord',
-        iosMode: 'measurement',
-        iosOptions: ['defaultToSpeaker', 'allowBluetoothA2DP'],
+        iosCategory: "playAndRecord",
+        iosMode: "measurement",
+        iosOptions: ["defaultToSpeaker", "allowBluetoothA2DP"],
         iosNotifyOthersOnDeactivation: true,
       });
 

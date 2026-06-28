@@ -37,7 +37,11 @@ export class MacLeodPitchDetector {
   private nsdf: Float32Array;
   private maxPositions: number[];
 
-  constructor(bufferSize = DEFAULT_BUFFER_SIZE, sampleRate = 44100, threshold = 0.1) {
+  constructor(
+    bufferSize = DEFAULT_BUFFER_SIZE,
+    sampleRate = 44100,
+    threshold = 0.1,
+  ) {
     this.bufferSize = bufferSize;
     this.sampleRate = sampleRate;
     this.threshold = threshold;
@@ -81,18 +85,21 @@ export class MacLeodPitchDetector {
 
   /**
    * Berechnet die Normalized Square Difference Function (NSDF).
+   *
+   * NSDF(τ) = 2·r(τ) / m(τ)
+   *   r(τ) = Σ x[i] · x[i+τ]      (Autokorrelation)
+   *   m(τ) = Σ x[i]² + x[i+τ]²    (Normalisierungs-Divisor, McLeod)
    */
   private calculateNSDF(buffer: Float32Array): void {
     const size = Math.min(this.bufferSize, buffer.length);
 
     for (let tau = 0; tau < size; tau += 1) {
-      let acf = 0; // Autocorrelation
-      let divisorM = 0; // Divisor (Normalisierung)
+      let acf = 0; // Autokorrelation r(τ)
+      let divisorM = 0; // Divisor m(τ) = Σ(x[i]² + x[i+τ]²)
 
       for (let i = 0; i < size - tau; i += 1) {
-        const squared = buffer[i] * buffer[i + tau];
-        acf += squared;
-        divisorM += squared;
+        acf += buffer[i] * buffer[i + tau];
+        divisorM += buffer[i] * buffer[i] + buffer[i + tau] * buffer[i + tau];
       }
 
       this.nsdf[tau] = divisorM === 0 ? 0 : (2 * acf) / divisorM;
@@ -109,7 +116,10 @@ export class MacLeodPitchDetector {
     for (let tau = 1; tau < size - 1; tau += 1) {
       // Aufsteigende Flanke → Spitze → Absteigende Flanke = Peak
       if (this.nsdf[tau] > this.threshold) {
-        if (this.nsdf[tau] > this.nsdf[tau - 1] && this.nsdf[tau] >= this.nsdf[tau + 1]) {
+        if (
+          this.nsdf[tau] > this.nsdf[tau - 1] &&
+          this.nsdf[tau] >= this.nsdf[tau + 1]
+        ) {
           // Lokales Maximum gefunden
           this.maxPositions.push(tau);
           lastPosition = tau;
@@ -148,7 +158,9 @@ export class MacLeodPitchDetector {
 
     if (x0 === position) {
       return this.nsdf[position] <= this.nsdf[x2]
-        ? position + (this.nsdf[x2] - this.nsdf[position]) / (2 * (this.nsdf[x2] - 2 * this.nsdf[position] + this.nsdf[x0]))
+        ? position +
+            (this.nsdf[x2] - this.nsdf[position]) /
+              (2 * (this.nsdf[x2] - 2 * this.nsdf[position] + this.nsdf[x0]))
         : position;
     }
 
