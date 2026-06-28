@@ -5,18 +5,18 @@
  * sowie einer Nachricht an.
  */
 
-import { memo, useEffect } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { memo, useEffect } from "react";
+import { Pressable, StyleSheet, View } from "react-native";
 import Animated, {
-    Easing,
-    runOnJS,
-    useAnimatedStyle,
-    useSharedValue,
-    withSequence,
-    withTiming,
-} from 'react-native-reanimated';
+  Easing,
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withSequence,
+  withTiming,
+} from "react-native-reanimated";
 
-import { ThemedText } from '@/components/themed-text';
+import { ThemedText } from "@/components/themed-text";
 
 export interface ResultBannerProps {
   /** Angezeigt? */
@@ -63,18 +63,14 @@ export const ResultBanner = memo(function ResultBanner({
 
   if (!visible) return null;
 
-  const bgColor = correct ? 'rgba(34,197,94,0.95)' : 'rgba(239,68,68,0.95)';
-  const icon = correct ? '✓' : '✗';
-  const defaultMessage = correct ? 'Richtig!' : 'Falsch';
+  const bgColor = correct ? "rgba(34,197,94,0.95)" : "rgba(239,68,68,0.95)";
+  const icon = correct ? "✓" : "✗";
+  const defaultMessage = correct ? "Richtig!" : "Falsch";
 
   return (
     <View style={styles.overlay}>
       <Animated.View
-        style={[
-          styles.banner,
-          { backgroundColor: bgColor },
-          animatedStyle,
-        ]}
+        style={[styles.banner, { backgroundColor: bgColor }, animatedStyle]}
       >
         <Pressable
           onPress={() => {
@@ -82,7 +78,9 @@ export const ResultBanner = memo(function ResultBanner({
           }}
           style={styles.content}
         >
-          <ThemedText type="title" style={styles.icon}>{icon}</ThemedText>
+          <ThemedText type="title" style={styles.icon}>
+            {icon}
+          </ThemedText>
           <ThemedText type="subtitle" style={styles.message}>
             {message ?? defaultMessage}
           </ThemedText>
@@ -99,39 +97,41 @@ export const ResultBanner = memo(function ResultBanner({
 
 const styles = StyleSheet.create({
   overlay: {
-    position: 'absolute',
+    position: "absolute",
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "flex-end",
+    paddingBottom: 120,
     zIndex: 100,
+    pointerEvents: "box-none",
   },
   banner: {
     paddingHorizontal: 32,
     paddingVertical: 24,
     borderRadius: 24,
-    alignItems: 'center',
+    alignItems: "center",
     gap: 8,
     minWidth: 200,
   },
   content: {
-    alignItems: 'center',
+    alignItems: "center",
     gap: 8,
   },
   icon: {
-    color: '#ffffff',
+    color: "#ffffff",
     fontSize: 48,
-    fontWeight: '700',
+    fontWeight: "700",
   },
   message: {
-    color: '#ffffff',
-    fontWeight: '600',
-    textAlign: 'center',
+    color: "#ffffff",
+    fontWeight: "600",
+    textAlign: "center",
   },
   detail: {
-    color: 'rgba(255,255,255,0.8)',
-    textAlign: 'center',
+    color: "rgba(255,255,255,0.8)",
+    textAlign: "center",
   },
 });

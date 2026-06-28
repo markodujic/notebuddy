@@ -18,9 +18,10 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
+import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { ResultBanner } from "@/components/feedback/result-banner";
+import { ParticleExplosion } from "@/components/effects/particle-explosion";
 import {
   KEYBOARD_ZOOM_DURATION_MS,
   PianoKeyboard,
@@ -49,6 +50,36 @@ import { useSessionStore } from "@/stores/session-store";
 type DisplayMode = "badge" | "staff";
 type ScreenPhase = "asking" | "listening" | "feedback" | "done";
 
+// Keyframes für "Atmen"-Animation während Listening-Phase.
+// Reanimated v4 CSS Animation – läuft komplett auf dem UI-Thread, 0 Re-Renders.
+const breathingPulse = {
+  from: { transform: [{ scale: 1 }], opacity: 0.85 },
+  "50%": { transform: [{ scale: 1.04 }], opacity: 1 },
+  to: { transform: [{ scale: 1 }], opacity: 0.85 },
+} as const;
+
+// Keyframes für Fly-In mit simuliertem Motion-Blur bei neuen Fragen.
+// skewX während der Bewegung erzeugt einen Richtungs-Stretch (Motion-Blur-Look).
+// Überschwingung am Ende für ein "Snappy" Gefühl.
+const flyInWithBlur = {
+  from: {
+    transform: [{ translateY: 60 }, { scale: 0.7 }, { skewX: "12deg" }],
+    opacity: 0,
+  },
+  "40%": {
+    transform: [{ translateY: -8 }, { scale: 1.05 }, { skewX: "-3deg" }],
+    opacity: 0.9,
+  },
+  "70%": {
+    transform: [{ translateY: 3 }, { scale: 0.98 }, { skewX: "1deg" }],
+    opacity: 1,
+  },
+  to: {
+    transform: [{ translateY: 0 }, { scale: 1 }, { skewX: "0deg" }],
+    opacity: 1,
+  },
+} as const;
+
 export default function NoteToPianoScreen() {
   const theme = useTheme();
   const { isCompact, isExpanded } = useBreakpoint();
@@ -72,9 +103,9 @@ export default function NoteToPianoScreen() {
   const [phase, setPhase] = useState<ScreenPhase>("asking");
   const [feedbackVisible, setFeedbackVisible] = useState(false);
   const [feedbackCorrect, setFeedbackCorrect] = useState(false);
-  const [feedbackMessage, setFeedbackMessage] = useState("");
-  // Falsch gespielte Note (für rote Tasten-Markierung bei falscher Antwort)
   const [wrongMidi, setWrongMidi] = useState<number | null>(null);
+  // Partikel-Explosion bei falscher Antwort
+  const [explosionTrigger, setExplosionTrigger] = useState(false);
 
   // Keyboard-Zoom: Bei jeder neuen Aufgabe 2 Sekunden alle 88 Tasten zeigen,
   // danach in den Fokus-Bereich reinzoomen.
@@ -208,19 +239,17 @@ export default function NoteToPianoScreen() {
       const correct = result.correct;
       setFeedbackCorrect(correct);
       setWrongMidi(correct ? null : detectedMidi);
-      setFeedbackMessage(
-        correct
-          ? "Richtig!"
-          : `Gespielt: ${notation.midiToDisplay(detectedMidi, { octaveStyle: "helmholtz" })}`,
-      );
-      setFeedbackVisible(true);
+      if (!correct) {
+        setExplosionTrigger(false);
+        // Microtask: State-Wechsel erzwingt Neu-Start der Animation
+        setTimeout(() => setExplosionTrigger(true), 0);
+      }
 
       const delay = correct
         ? LEARNING_CONFIG.FEEDBACK_CORRECT_MS
         : LEARNING_CONFIG.FEEDBACK_INCORRECT_MS;
 
       setTimeout(() => {
-        setFeedbackVisible(false);
         if (session.isComplete) {
           setPhase("done");
         } else {
@@ -353,8 +382,37 @@ export default function NoteToPianoScreen() {
 
         {/* Note Display */}
         <ThemedView style={styles.displayCard}>
+          {/* Partikel-Explosion bei falscher Antwort */}
+          {displayMode === "badge" && (
+            <ParticleExplosion
+              trigger={explosionTrigger}
+              centerX={150}
+              centerY={120}
+              size={300}
+            />
+          )}
           {displayMode === "badge" ? (
-            <View style={styles.badgeContainer}>
+            <Animated.View
+              key={`badge-${targetMidi}`}
+              style={[
+                styles.badgeContainer,
+                {
+                  // Fly-In bei jeder neuen Frage (key-Wechsel startet Animation neu)
+                  animationName: flyInWithBlur,
+                  animationDuration: "600ms",
+                  animationTimingFunction: "ease-out",
+                  animationFillMode: "both",
+                },
+                phase === "listening" && {
+                  // "Atmen" übernimmt nach dem Fly-In (gleicher Name = Überschreibung)
+                  animationName: breathingPulse,
+                  animationDuration: "1500ms",
+                  animationTimingFunction: "ease-in-out",
+                  animationDirection: "alternate",
+                  animationIterationCount: "infinite",
+                },
+              ]}
+            >
               <ThemedText
                 style={[
                   styles.noteBadge,
@@ -367,9 +425,11 @@ export default function NoteToPianoScreen() {
                 {targetName || "–"}
               </ThemedText>
               <ThemedText type="small" themeColor="textSecondary">
-                Spiele oder singe diese Note
+                {phase === "listening"
+                  ? "Höre zu…"
+                  : "Spiele oder singe diese Note"}
               </ThemedText>
-            </View>
+            </Animated.View>
           ) : (
             <View style={styles.staffContainer}>
               <StaffView
@@ -400,14 +460,6 @@ export default function NoteToPianoScreen() {
           />
         </ThemedView>
       </ThemedView>
-
-      {/* Result Banner */}
-      <ResultBanner
-        visible={feedbackVisible}
-        correct={feedbackCorrect}
-        message={feedbackMessage}
-        onDismiss={() => setFeedbackVisible(false)}
-      />
     </ScrollView>
   );
 }

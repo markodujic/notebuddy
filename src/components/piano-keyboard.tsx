@@ -67,6 +67,17 @@ const VIEWPORT_PADDING = 12;
 /** Real piano white-key ratio: height / width ≈ 6 */
 const KEY_ASPECT_RATIO = 6;
 
+// ── 3D-Perspektive (Pianisten-Sicht) ────────────────────────────────────
+/** Rotationswinkel in Grad – 0 = flach (Overview), 38 = Pianisten-Sicht */
+const FOCUS_ROTATE_X = 38;
+/** Perspektive: kleiner = stärkerer 3D-Effekt */
+const FOCUS_PERSPECTIVE = 800;
+const OVERVIEW_PERSPECTIVE = 2000;
+/** Simulierte Tastentiefe (Frontkante) in natural units */
+const KEY_DEPTH = 6;
+/** Anteil der Taste, der als Frontkante (dunkler) gezeichnet wird */
+const FRONT_FACE_RATIO = 0.08;
+
 function isBlackMidi(midi: number) {
   return [1, 3, 6, 8, 10].includes(midi % 12);
 }
@@ -101,12 +112,26 @@ function resolveKeyFill(
   if (dimmed) return isBlackKey ? "#4a4a55" : "#c8c8cc";
 
   // Range highlight: subtle violet tint to show the active range
-  // (visible in ALL zoom modes, including overview)
   if (inRange && !isBlackKey) return "#ede9fe";
   if (inRange && isBlackKey) return "#3b2a5c";
 
   // Normal idle fill
   return isBlackKey ? "#1f1f28" : "#f8f7f4";
+}
+
+/** Etwas dunklere Variante für die Frontkante (Tiefe-Simulation). */
+function resolveFrontFaceFill(
+  key: PianoKey,
+  isBlackKey: boolean,
+  dimmed: boolean,
+) {
+  const state = key.state ?? "idle";
+
+  if (state === "correct") return isBlackKey ? "#0f7a37" : "#16a34a";
+  if (state === "wrong") return isBlackKey ? "#991b1b" : "#dc2626";
+  if (state === "current") return isBlackKey ? "#a87f06" : "#ca9a0a";
+  if (dimmed) return isBlackKey ? "#3a3a44" : "#b0b0b5";
+  return isBlackKey ? "#15151c" : "#d8d5cc";
 }
 
 function getBlackLeft(
@@ -258,6 +283,7 @@ export function PianoKeyboard({
   const keyboardWidth = naturalKeyboardWidth;
   const pianoHeight = naturalWhiteKeyWidth * KEY_ASPECT_RATIO;
   const blackKeyHeight = pianoHeight * 0.62;
+  const frontFaceHeight = pianoHeight * FRONT_FACE_RATIO;
 
   // Whether a key lies inside the active focus range
   const isInFocusRange = (midi: number) =>
@@ -299,8 +325,16 @@ export function PianoKeyboard({
         ? focusScale
         : overviewScale;
 
+  // ── 3D-Perspektive SharedValues ───────────────────────────────────────
+  // Overview = flach (0°), Focus/Detail = Pianisten-Sicht (52°)
+  const targetRotateX = zoomMode === "overview" ? 0 : FOCUS_ROTATE_X;
+  const targetPerspective =
+    zoomMode === "overview" ? OVERVIEW_PERSPECTIVE : FOCUS_PERSPECTIVE;
+
   const scaleSv = useSharedValue(targetScale);
   const offsetX = useSharedValue(0);
+  const rotateXSv = useSharedValue(targetRotateX);
+  const perspectiveSv = useSharedValue(targetPerspective);
 
   useEffect(() => {
     if (viewportWidth <= 0) return;
@@ -326,30 +360,56 @@ export function PianoKeyboard({
       isFirstLayout.current = false;
       scaleSv.value = targetScale;
       offsetX.value = targetOffset;
+      rotateXSv.value = targetRotateX;
+      perspectiveSv.value = targetPerspective;
     } else {
       scaleSv.value = withTiming(targetScale, animationConfig);
       offsetX.value = withTiming(targetOffset, animationConfig);
+      rotateXSv.value = withTiming(targetRotateX, animationConfig);
+      perspectiveSv.value = withTiming(targetPerspective, animationConfig);
     }
   }, [
     targetScale,
+    targetRotateX,
+    targetPerspective,
     zoomMode,
     viewportWidth,
     keyboardWidth,
     focusCenter,
     scaleSv,
     offsetX,
+    rotateXSv,
+    perspectiveSv,
   ]);
 
-  // Uniform scale preserves real piano-key proportions at every zoom level.
-  // transformOrigin "left top" anchors at the top-left corner.
-  const cameraStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: offsetX.value }, { scale: scaleSv.value }],
-  }));
+  // ── Viewport-Höhe (3D-Projektion) ─────────────────────────────────────
+  const viewportStyle = useAnimatedStyle(() => {
+    const rad = (rotateXSv.value * Math.PI) / 180;
+    const cosR = Math.cos(rad);
+    const sinR = Math.sin(rad);
+    const projected = pianoHeight * scaleSv.value * cosR;
+    const frontFace = KEY_DEPTH * scaleSv.value * sinR;
+    return {
+      height: projected + frontFace + VIEWPORT_PADDING * 2,
+    };
+  });
 
-  // The viewport height grows with the scale so the full key height is
-  // always visible — no clipping, proportions stay correct.
-  const viewportStyle = useAnimatedStyle(() => ({
-    height: pianoHeight * scaleSv.value + VIEWPORT_PADDING * 2,
+  // ── Camera (Pan + Scale + 3D-Kippung) ────────────────────────────────
+  // translateX/scale für Pan & Zoom, rotateX für Pianisten-Sicht.
+  // transformOrigin "center bottom" kippt von der Unterkante.
+  // perspective liegt statisch auf dem Viewport (Parent) → Fluchtpunkt
+  // immer am Bildschirm-Zentrum, unabhängig vom Pan-Offset.
+  // perspective als erstes im transform-Array → definiert den 3D-Raum.
+  // Da es im selben Array wie translateX/scale liegt, gilt es lokal für
+  // dieses Element. Der Fluchtpunkt ist am Element-Zentrum.
+  // Reanimated v4 type erfordert perspective als number (nicht string).
+  const cameraStyle = useAnimatedStyle(() => ({
+    transform: [
+      { perspective: perspectiveSv.value },
+      { translateX: offsetX.value },
+      { scale: scaleSv.value },
+      { rotateX: `${rotateXSv.value}deg` },
+    ],
   }));
 
   function handleLayout(e: LayoutChangeEvent) {
@@ -369,7 +429,7 @@ export function PianoKeyboard({
               width: keyboardWidth,
               height: pianoHeight,
               top: VIEWPORT_PADDING,
-              transformOrigin: "left top",
+              transformOrigin: "center bottom",
             },
             cameraStyle,
           ]}
@@ -377,7 +437,7 @@ export function PianoKeyboard({
           <Canvas style={{ width: keyboardWidth, height: pianoHeight }}>
             {whiteKeys.map((key, index) => (
               <Group key={key.midi}>
-                {/* C3: rounded white key */}
+                {/* Weiße Taste – Hauptkörper */}
                 <RoundedRect
                   x={index * keyWidth}
                   y={0}
@@ -391,6 +451,16 @@ export function PianoKeyboard({
                     isInRange(key.midi),
                   )}
                 />
+                {/* Frontkante – dunkler (Tiefe-Simulation bei 3D-Neigung) */}
+                <RoundedRect
+                  x={index * keyWidth}
+                  y={pianoHeight - frontFaceHeight}
+                  width={keyWidth}
+                  height={frontFaceHeight}
+                  r={2}
+                  color={resolveFrontFaceFill(key, false, isDimmed(key.midi))}
+                />
+                {/* Outline */}
                 <RoundedRect
                   x={index * keyWidth}
                   y={0}
@@ -423,20 +493,30 @@ export function PianoKeyboard({
             {blackKeys.map((key) => {
               const x = getBlackLeft(whiteKeys, keyWidth, key);
               return (
-                <RoundedRect
-                  key={key.midi}
-                  x={x}
-                  y={0}
-                  width={blackKeyWidth}
-                  height={blackKeyHeight}
-                  r={1.5}
-                  color={resolveKeyFill(
-                    key,
-                    true,
-                    isDimmed(key.midi),
-                    isInRange(key.midi),
-                  )}
-                />
+                <Group key={key.midi}>
+                  <RoundedRect
+                    x={x}
+                    y={0}
+                    width={blackKeyWidth}
+                    height={blackKeyHeight}
+                    r={1.5}
+                    color={resolveKeyFill(
+                      key,
+                      true,
+                      isDimmed(key.midi),
+                      isInRange(key.midi),
+                    )}
+                  />
+                  {/* Schwarze Taste Frontkante */}
+                  <RoundedRect
+                    x={x}
+                    y={blackKeyHeight - frontFaceHeight * 0.6}
+                    width={blackKeyWidth}
+                    height={frontFaceHeight * 0.6}
+                    r={1}
+                    color={resolveFrontFaceFill(key, true, isDimmed(key.midi))}
+                  />
+                </Group>
               );
             })}
           </Canvas>
