@@ -1,32 +1,36 @@
 /**
- * Audio-Worklet-Engine – Pitch-Detection auf nativem Audio-Thread (Stufe C).
+ * Audio-Worklet-Engine – Pitch-Detection auf Reanimated-UI-Thread (Stufe B).
  *
- * Vollständiger AudioContext-Graph (C1):
- *   AudioRecorder → RecorderAdapterNode → WorkletNode['AudioRuntime']
+ * Vollständiger AudioContext-Graph:
+ *   AudioRecorder → RecorderAdapterNode → WorkletNode['UIRuntime']
  *
- * Der Worklet-Callback läuft auf dem **nativen Audio-Thread** (nicht JS, nicht UI):
+ * Der Worklet-Callback läuft auf dem **Reanimated-UI-Thread** (nicht JS):
  *   1. RMS berechnen (worklet-safe, inline)
  *   2. MacLeod NSDF + Peaks + Interpolation (via Factory, pre-allocated buffers)
  *   3. Kontinuierliche Werte → SharedValues (direkt `.value =`)
  *   4. Diskrete Events → `runOnJS(onFrame)(...)` (selten, kein Perf-Problem)
  *
- * Schnittstelle ist identisch zu `useAudioEngine` (Stufe A) → Screen unverändert.
+ * Stufe B statt C: `AudioRuntime` (fremder nativer Thread) hat keinen
+ * Reanimated-Kontext → SharedValue-Schreiben und runOnJS funktionieren dort
+ * nicht. `UIRuntime` ist der Reanimated-Thread, wo beides nativ verfügbar ist.
+ * Dadurch entlasten wir den JS-Thread (Detection läuft woanders), haben aber
+ * weiterhin vollen Zugriff auf die SharedValue-Infrastruktur.
  *
- * ⚠️ Dev-Build Pflicht (native Worklet-API). Siehe PITCH-STAGE-C-PLAN.md.
+ * Schnittstelle ist identisch zu `useAudioEngine` (Stufe A) → Screen unverändert.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-    AudioContext,
-    AudioManager,
-    AudioRecorder,
+  AudioContext,
+  AudioManager,
+  AudioRecorder,
 } from "react-native-audio-api";
 import { runOnJS } from "react-native-reanimated";
 
 import {
-    CLARITY_THRESHOLD,
-    RMS_GATE_THRESHOLD,
-    VOLUME_EMA_FACTOR,
+  CLARITY_THRESHOLD,
+  RMS_GATE_THRESHOLD,
+  VOLUME_EMA_FACTOR,
 } from "@/domain";
 
 import { createMacLeodWorklet, WORKLET_BUFFER_SIZE } from "./macleod-worklet";
@@ -53,7 +57,7 @@ const SAMPLE_RATE = 44100;
 const SILENCE_FRAME_RESET = 5;
 
 /**
- * Audio-Worklet-Engine Hook: Pitch-Detection auf nativem Audio-Thread.
+ * Audio-Worklet-Engine Hook: Pitch-Detection auf Reanimated-UI-Thread (Stufe B).
  *
  * Drop-in-Ersatz für `useAudioEngine` (Stufe A) bei aktiviertem Feature-Flag.
  * Gleiche Rückgabe-Schnittstelle: `{ startListening, stopListening, resetDetector, isStreaming }`.
@@ -83,7 +87,7 @@ export function useAudioWorkletEngine(
   /**
    * Startet AudioContext-Graph + Aufnahme.
    *
-   * Graph: AudioRecorder → RecorderAdapterNode → WorkletNode['AudioRuntime']
+   * Graph: AudioRecorder → RecorderAdapterNode → WorkletNode['UIRuntime']
    */
   const startListening = useCallback(async () => {
     try {
@@ -135,7 +139,7 @@ export function useAudioWorkletEngine(
       let volumeEma = 0;
       let silenceFrameCount = 0;
 
-      // Der Worklet-Callback läuft auf 'AudioRuntime' = nativer Audio-Thread.
+      // Der Worklet-Callback läuft auf 'UIRuntime' = Reanimated-UI-Thread.
       // 'worklet'-Direktive wird durch makeShareableCloneRecursive ergänzt.
       const workletCallback = (
         audioData: Float32Array[],
@@ -197,12 +201,15 @@ export function useAudioWorkletEngine(
         runOnJS(handleFrameOnJs)(detectedFrequency, result.clarity, volumeEma);
       };
 
-      // WorkletNode erstellen (AudioRuntime = nativer Audio-Thread!)
+      // WorkletNode erstellen.
+      // 'UIRuntime' = Reanimated-UI-Thread (Stufe B). Dort funktionieren
+      // SharedValue-Schreibzugriffe und runOnJS nativ, im Gegensatz zum
+      // fremden 'AudioRuntime'-Thread, der keinen Reanimated-Kontext hat.
       const workletNode = context.createWorkletNode(
         workletCallback,
         WORKLET_BUFFER_SIZE,
         1, // mono
-        "AudioRuntime",
+        "UIRuntime",
       );
 
       // Graph verbinden: Mic → Adapter → Worklet

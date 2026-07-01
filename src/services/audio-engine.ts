@@ -1,13 +1,11 @@
 /**
- * Audio-Engine – Pitch-Detection-Pipeline (Dispatcher Stufe A/C).
+ * Audio-Engine – Pitch-Detection-Pipeline (Dispatcher Stufe A/B).
  *
  * Feature-Flag `USE_WORKLET_ENGINE` steuert die Pipeline:
- * - `true`  → Stufe C: `useAudioWorkletEngine` (nativer Audio-Thread, Dev-Build).
- * - `false` → Stufe A: `useAudioEngineJs` (JS-Thread, OTA-fähig, Fallback).
+ * - `true`  → Stufe B: `useAudioWorkletEngine` (Reanimated-UI-Thread).
+ * - `false` → Stufe A: `useAudioEngineJs` (JS-Thread, Fallback).
  *
  * Beide Engines haben dieselbe Schnittstelle → Aufrufer (Screen) unverändert.
- *
- * ⚠️ Stufe C erfordert Dev-Build (native Worklet-API). Siehe PITCH-STAGE-C-PLAN.md.
  *
  * Stufe-A-Pipeline (Fallback, JS-Thread):
  *   AudioRecorder (PCM) → RMS-Gate → PitchDetector → SharedValues + onFrame
@@ -45,18 +43,18 @@ export type AudioEngineStatus = "idle" | "requesting" | "streaming" | "error";
 export type AudioEngineErrorCallback = (error: Error) => void;
 
 /**
- * Feature-Flag: Stufe C (Native AudioWorklet) aktivieren.
+ * Feature-Flag: Stufe B (Worklet auf Reanimated-UI-Thread) aktivieren.
  *
- * - `true`  → `useAudioWorkletEngine` (nativer Audio-Thread, Dev-Build Pflicht).
- * - `false` → `useAudioEngineJs` (JS-Thread, OTA-fähig, Stufe-A-Fallback).
+ * - `true`  → `useAudioWorkletEngine` (UI-Thread, entlastet JS-Thread).
+ * - `false` → `useAudioEngineJs` (JS-Thread, Stufe-A-Fallback).
  *
- * ⚠️ Bei `true` ist ein neuer Dev-Build erforderlich (native Worklet-API).
- * Siehe PITCH-STAGE-C-PLAN.md.
+ * Stufe C (`AudioRuntime`) ist nicht kompatibel mit Reanimated-SharedValues,
+ * daher verwenden wir Stufe B (`UIRuntime`). Siehe PITCH-STAGE-C-PLAN.md.
  */
 export const USE_WORKLET_ENGINE = true;
 
 /**
- * Audio-Engine Dispatcher – wählt Stufe A oder C basierend auf Feature-Flag.
+ * Audio-Engine Dispatcher – wählt Stufe A oder B basierend auf Feature-Flag.
  *
  * Beide Engines haben dieselbe Rückgabe-Schnittstelle → Aufrufer unverändert.
  */
