@@ -27,7 +27,7 @@ const modes = [
     description: "Positionen im System mental erfassen und sicher anwählen.",
     icon: "🎼",
     accent: "#0ea5e9",
-    href: "/explore" as const,
+    href: "/visualize" as const,
   },
   {
     title: "Tonumfang",
