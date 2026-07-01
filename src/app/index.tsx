@@ -41,7 +41,7 @@ const modes = [
     description: "Mit einem geführten Tutorial die Klaviatur verstehen.",
     icon: "📖",
     accent: "#ec4899",
-    href: "/explore" as const,
+    href: "/tutorial" as const,
   },
 ];
 

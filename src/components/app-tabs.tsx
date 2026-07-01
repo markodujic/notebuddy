@@ -55,6 +55,15 @@ export default function AppTabs() {
           renderingMode="template"
         />
       </NativeTabs.Trigger>
+
+      {/* tutorial als eigener Tab */}
+      <NativeTabs.Trigger name="tutorial">
+        <NativeTabs.Trigger.Label>Tutorial</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon
+          src={require("@/assets/images/tabIcons/explore.png")}
+          renderingMode="template"
+        />
+      </NativeTabs.Trigger>
     </NativeTabs>
   );
 }
