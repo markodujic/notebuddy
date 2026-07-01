@@ -51,7 +51,9 @@ export type AudioEngineErrorCallback = (error: Error) => void;
  * Stufe C (`AudioRuntime`) ist nicht kompatibel mit Reanimated-SharedValues,
  * daher verwenden wir Stufe B (`UIRuntime`). Siehe PITCH-DATAFLOW-PLAN.md.
  */
-export const USE_WORKLET_ENGINE = true;
+// ⚠️ EXPERIMENTAL — Stufe B braucht Dev-Build-Tests auf echtem Gerät.
+// Auf false setzen, um Stufe A (bewährt, JS-Thread) zu nutzen.
+export const USE_WORKLET_ENGINE = false;
 
 /**
  * Audio-Engine Dispatcher – wählt Stufe A oder B basierend auf Feature-Flag.
