@@ -14,19 +14,19 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { NoteButtons } from "@/components/controls/note-buttons";
 import {
-    PianoKeyboard,
-    type KeyboardFeedback,
-    type KeyboardZoomMode,
+  PianoKeyboard,
+  type KeyboardFeedback,
+  type KeyboardZoomMode,
 } from "@/components/piano-keyboard";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { BottomTabInset, MaxContentWidth, Spacing } from "@/constants/theme";
 import { LEARNING_CONFIG, getNotation } from "@/domain";
-import { useBreakpoint } from "@/hooks/use-breakpoint";
 import { useTheme } from "@/hooks/use-theme";
 import { useAppStore } from "@/stores/app-store";
 import { useSessionStore } from "@/stores/session-store";
@@ -35,11 +35,9 @@ type ScreenPhase = "asking" | "input" | "feedback" | "done";
 
 export default function PianoToNoteScreen() {
   const theme = useTheme();
-  const { isCompact, isExpanded } = useBreakpoint();
   const insets = useSafeAreaInsets();
 
   // Stores
-  const clef = useAppStore((s) => s.clef);
   const notationSystemId = useAppStore((s) => s.notationSystemId);
   const effectiveRange = useAppStore((s) => s.getEffectiveRange());
 
@@ -148,96 +146,102 @@ export default function PianoToNoteScreen() {
   };
 
   return (
-    <ScrollView
-      style={[styles.scrollView, { backgroundColor: theme.background }]}
-      contentInset={contentInsets}
-      contentContainerStyle={[
-        styles.contentContainer,
-        {
-          paddingTop: insets.top,
-          paddingLeft: insets.left,
-          paddingRight: insets.right,
-          paddingBottom: insets.bottom,
-        },
-      ]}
-    >
-      <ThemedView style={styles.container}>
-        {/* Header */}
-        <ThemedView style={styles.header}>
-          <ThemedText type="subtitle">
-            Aufgabe {Math.min(session.currentIndex + 1, session.exerciseCount)}{" "}
-            / {session.exerciseCount}
-          </ThemedText>
-          <ThemedText type="small" themeColor="textSecondary">
-            ✓ {session.correctCount} · ✗ {session.incorrectCount}
-          </ThemedText>
-        </ThemedView>
+    <GestureHandlerRootView style={styles.gestureRoot}>
+      <ScrollView
+        style={[styles.scrollView, { backgroundColor: theme.background }]}
+        contentInset={contentInsets}
+        contentContainerStyle={[
+          styles.contentContainer,
+          {
+            paddingTop: insets.top,
+            paddingLeft: insets.left,
+            paddingRight: insets.right,
+            paddingBottom: insets.bottom,
+          },
+        ]}
+      >
+        <ThemedView style={styles.container}>
+          {/* Header */}
+          <ThemedView style={styles.header}>
+            <ThemedText type="subtitle">
+              Aufgabe{" "}
+              {Math.min(session.currentIndex + 1, session.exerciseCount)} /{" "}
+              {session.exerciseCount}
+            </ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              ✓ {session.correctCount} · ✗ {session.incorrectCount}
+            </ThemedText>
+          </ThemedView>
 
-        {/* Status-Anzeige */}
-        <ThemedView style={styles.displayCard}>
-          {phase === "done" ? (
-            <ThemedText type="title">Fertig!</ThemedText>
-          ) : phase === "feedback" ? (
-            <View style={styles.feedbackContainer}>
-              <ThemedText
-                type="title"
-                style={{ color: feedbackCorrect ? "#22c55e" : "#ef4444" }}
-              >
-                {feedbackCorrect ? "✓ Richtig!" : "✗ Falsch"}
-              </ThemedText>
-              <ThemedText type="subtitle">
-                {targetName}{" "}
-                {feedbackCorrect
-                  ? ""
-                  : `(deine: ${selectedKeyMidi !== null ? notation.midiToDisplay(selectedKeyMidi, { octaveStyle: "helmholtz" }) : "?"})`}
-              </ThemedText>
-            </View>
-          ) : (
-            <View style={styles.instructionContainer}>
-              <ThemedText type="subtitle">
-                {phase === "input"
-                  ? selectedKeyMidi !== null
-                    ? "Wähle den Notennamen:"
-                    : "Tippe eine Taste auf dem Klavier:"
-                  : "Bereit?"}
-              </ThemedText>
-              {selectedKeyMidi !== null && phase === "input" && (
-                <ThemedText type="small" themeColor="textSecondary">
-                  Getippt:{" "}
-                  {notation.midiToDisplay(selectedKeyMidi, {
-                    octaveStyle: "helmholtz",
-                  })}
+          {/* Status-Anzeige */}
+          <ThemedView style={styles.displayCard}>
+            {phase === "done" ? (
+              <ThemedText type="title">Fertig!</ThemedText>
+            ) : phase === "feedback" ? (
+              <View style={styles.feedbackContainer}>
+                <ThemedText
+                  type="title"
+                  style={{ color: feedbackCorrect ? "#22c55e" : "#ef4444" }}
+                >
+                  {feedbackCorrect ? "✓ Richtig!" : "✗ Falsch"}
                 </ThemedText>
-              )}
-            </View>
+                <ThemedText type="subtitle">
+                  {targetName}{" "}
+                  {feedbackCorrect
+                    ? ""
+                    : `(deine: ${selectedKeyMidi !== null ? notation.midiToDisplay(selectedKeyMidi, { octaveStyle: "helmholtz" }) : "?"})`}
+                </ThemedText>
+              </View>
+            ) : (
+              <View style={styles.instructionContainer}>
+                <ThemedText type="subtitle">
+                  {phase === "input"
+                    ? selectedKeyMidi !== null
+                      ? "Wähle den Notennamen:"
+                      : "Tippe eine Taste auf dem Klavier:"
+                    : "Bereit?"}
+                </ThemedText>
+                {selectedKeyMidi !== null && phase === "input" && (
+                  <ThemedText type="small" themeColor="textSecondary">
+                    Getippt:{" "}
+                    {notation.midiToDisplay(selectedKeyMidi, {
+                      octaveStyle: "helmholtz",
+                    })}
+                  </ThemedText>
+                )}
+              </View>
+            )}
+          </ThemedView>
+
+          {/* Klaviatur */}
+          <ThemedView style={styles.keyboardCard}>
+            <PianoKeyboard
+              targetMidi={phase === "feedback" ? targetMidi : null}
+              wrongMidi={phase === "feedback" ? wrongMidi : null}
+              feedback={keyboardFeedback}
+              interactive={phase === "input"}
+              onKeyPress={handleKeyPress}
+              zoomMode={keyboardZoomMode}
+              focusRange={[effectiveRange.minMidi, effectiveRange.maxMidi]}
+            />
+          </ThemedView>
+
+          {/* NoteButtons — nur sichtbar wenn eine Taste getippt wurde */}
+          {phase === "input" && selectedKeyMidi !== null && (
+            <ThemedView style={styles.noteButtonsCard}>
+              <NoteButtons onNoteSelect={handleNoteSelect} />
+            </ThemedView>
           )}
         </ThemedView>
-
-        {/* Klaviatur */}
-        <ThemedView style={styles.keyboardCard}>
-          <PianoKeyboard
-            targetMidi={phase === "feedback" ? targetMidi : null}
-            wrongMidi={phase === "feedback" ? wrongMidi : null}
-            feedback={keyboardFeedback}
-            interactive={phase === "input"}
-            onKeyPress={handleKeyPress}
-            zoomMode={keyboardZoomMode}
-            focusRange={[effectiveRange.minMidi, effectiveRange.maxMidi]}
-          />
-        </ThemedView>
-
-        {/* NoteButtons — nur sichtbar wenn eine Taste getippt wurde */}
-        {phase === "input" && selectedKeyMidi !== null && (
-          <ThemedView style={styles.noteButtonsCard}>
-            <NoteButtons onNoteSelect={handleNoteSelect} />
-          </ThemedView>
-        )}
-      </ThemedView>
-    </ScrollView>
+      </ScrollView>
+    </GestureHandlerRootView>
   );
 }
 
 const styles = StyleSheet.create({
+  gestureRoot: {
+    flex: 1,
+  },
   scrollView: {
     flex: 1,
   },
