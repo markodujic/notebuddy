@@ -34,7 +34,7 @@ const modes = [
     description: "Deinen sicheren Bereich testen und gezielt erweitern.",
     icon: "⚡",
     accent: "#f59e0b",
-    href: "/explore" as const,
+    href: "/range-finder" as const,
   },
   {
     title: "Erklärmodus",
