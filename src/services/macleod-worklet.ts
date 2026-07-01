@@ -1,10 +1,10 @@
 /**
- * MacLeod Pitch-Detection – Worklet-Safe Portierung (Stufe C).
+ * MacLeod Pitch-Detection – Worklet-Safe Portierung (Stufe B).
  *
  * Rein funktionale Factory-Funktion statt Klasse, damit der Algorithmus im
- * nativen Audio-Thread (`WorkletNode['AudioRuntime']`) laufen kann.
+ * Reanimated-UI-Thread (`WorkletNode['UIRuntime']`) laufen kann.
  *
- * Worklet-Constraints (siehe PITCH-STAGE-C-PLAN.md):
+ * Worklet-Constraints (siehe PITCH-DATAFLOW-PLAN.md):
  * - Kein `this`, keine Klassen
  * - Pre-allocated Buffers via Closure-HOF → kein GC-Druck pro Frame
  * - Nur reine Arithmetik auf Float32Array / number

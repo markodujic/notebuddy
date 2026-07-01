@@ -14,7 +14,7 @@
 /* eslint-disable react-hooks/rules-of-hooks -- USE_WORKLET_ENGINE ist eine
    Modul-Konstante (compile-time switch). Der gewählte Hook ist über alle
    Renders stabil → Hook-Reihenfolge bleibt deterministisch. Siehe
-   PITCH-STAGE-C-PLAN.md. */
+   PITCH-DATAFLOW-PLAN.md. */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AudioManager, AudioRecorder } from "react-native-audio-api";
@@ -49,7 +49,7 @@ export type AudioEngineErrorCallback = (error: Error) => void;
  * - `false` → `useAudioEngineJs` (JS-Thread, Stufe-A-Fallback).
  *
  * Stufe C (`AudioRuntime`) ist nicht kompatibel mit Reanimated-SharedValues,
- * daher verwenden wir Stufe B (`UIRuntime`). Siehe PITCH-STAGE-C-PLAN.md.
+ * daher verwenden wir Stufe B (`UIRuntime`). Siehe PITCH-DATAFLOW-PLAN.md.
  */
 export const USE_WORKLET_ENGINE = true;
 
