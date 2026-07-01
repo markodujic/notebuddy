@@ -1,21 +1,22 @@
 /**
- * Audio-Engine – Pitch-Detection-Pipeline auf Basis von react-native-audio-api.
+ * Audio-Engine – Pitch-Detection-Pipeline (Dispatcher Stufe A/C).
  *
- * ⚠️ Architektur (Stufe A, siehe PITCH-DATAFLOW-PLAN.md):
- * Audio-Verarbeitung läuft in Refs (kein React-Render-Zyklus).
- * Kontinuierliche Werte (volume, clarity, frequency, detectedMidi) werden
- * PRO FRAME in SharedValues geschrieben → 0 Re-Renders.
+ * Feature-Flag `USE_WORKLET_ENGINE` steuert die Pipeline:
+ * - `true`  → Stufe C: `useAudioWorkletEngine` (nativer Audio-Thread, Dev-Build).
+ * - `false` → Stufe A: `useAudioEngineJs` (JS-Thread, OTA-fähig, Fallback).
  *
- * Pipeline:
+ * Beide Engines haben dieselbe Schnittstelle → Aufrufer (Screen) unverändert.
+ *
+ * ⚠️ Stufe C erfordert Dev-Build (native Worklet-API). Siehe PITCH-STAGE-C-PLAN.md.
+ *
+ * Stufe-A-Pipeline (Fallback, JS-Thread):
  *   AudioRecorder (PCM) → RMS-Gate → PitchDetector → SharedValues + onFrame
- *
- * Verwendet ausschließlich die gekapselten Setter von `PitchSharedValuesApi`
- * (`setFrame`), niemals direkte `.value`-Mutationen → React-Compiler-kompatibel.
- *
- * Der optionale `onFrame`-Callback ist für seltene Diskret-Logik (z.B.
- * Stability-Tracking + Submit), die ihrerseits nur in SharedValues oder
- * via `runOnJS` kommunizieren sollte – niemals `setState` pro Frame.
  */
+
+/* eslint-disable react-hooks/rules-of-hooks -- USE_WORKLET_ENGINE ist eine
+   Modul-Konstante (compile-time switch). Der gewählte Hook ist über alle
+   Renders stabil → Hook-Reihenfolge bleibt deterministisch. Siehe
+   PITCH-STAGE-C-PLAN.md. */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AudioManager, AudioRecorder } from "react-native-audio-api";
@@ -25,6 +26,7 @@ import {
   RMS_GATE_THRESHOLD,
   VOLUME_EMA_FACTOR,
 } from "@/domain";
+import { useAudioWorkletEngine } from "./audio-worklet-engine";
 import {
   DEFAULT_BUFFER_SIZE,
   MacLeodPitchDetector,
@@ -43,7 +45,36 @@ export type AudioEngineStatus = "idle" | "requesting" | "streaming" | "error";
 export type AudioEngineErrorCallback = (error: Error) => void;
 
 /**
- * Audio-Engine Hook: Real-time Pitch-Detection aus dem Mikrofon.
+ * Feature-Flag: Stufe C (Native AudioWorklet) aktivieren.
+ *
+ * - `true`  → `useAudioWorkletEngine` (nativer Audio-Thread, Dev-Build Pflicht).
+ * - `false` → `useAudioEngineJs` (JS-Thread, OTA-fähig, Stufe-A-Fallback).
+ *
+ * ⚠️ Bei `true` ist ein neuer Dev-Build erforderlich (native Worklet-API).
+ * Siehe PITCH-STAGE-C-PLAN.md.
+ */
+export const USE_WORKLET_ENGINE = true;
+
+/**
+ * Audio-Engine Dispatcher – wählt Stufe A oder C basierend auf Feature-Flag.
+ *
+ * Beide Engines haben dieselbe Rückgabe-Schnittstelle → Aufrufer unverändert.
+ */
+export function useAudioEngine(
+  values: PitchSharedValuesApi,
+  onFrame?: AudioEngineCallback,
+  onError?: AudioEngineErrorCallback,
+) {
+  // USE_WORKLET_ENGINE ist eine Modul-Konstante → der gewählte Hook ist über
+  // alle Renders stabil. Die ternary verletzt also nicht die Rules-of-Hooks
+  // (Hook-Reihenfolge bleibt deterministisch).
+  return USE_WORKLET_ENGINE
+    ? useAudioWorkletEngine(values, onFrame, onError)
+    : useAudioEngineJs(values, onFrame, onError);
+}
+
+/**
+ * Stufe-A Audio-Engine: Real-time Pitch-Detection auf dem JS-Thread (Fallback).
  *
  * Schreibt kontinuierliche Werte in `values` (SharedValues) – kein Re-Render.
  * Verwendet ausschließlich die gekapselten Setter → React-Compiler-kompatibel.
@@ -53,7 +84,7 @@ export type AudioEngineErrorCallback = (error: Error) => void;
  * @param onFrame  Optionaler Callback für Diskret-Logik (Stability etc.).
  * @param onError  Optionaler Fehler-Callback.
  */
-export function useAudioEngine(
+function useAudioEngineJs(
   values: PitchSharedValuesApi,
   onFrame?: AudioEngineCallback,
   onError?: AudioEngineErrorCallback,
