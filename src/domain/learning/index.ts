@@ -46,3 +46,7 @@ export {
     ZWEIER_GRUPPEN
 } from "./tutorial-config";
 
+export {
+    getClefForNote, RangeFinder, type NoteTestResult, type RangeFinderState
+} from "./range-finder";
+
