@@ -5,21 +5,21 @@
  * Alle anderen Werte (Frequenz, Name, Oktave, etc.) werden abgeleitet.
  */
 
-import { midiToFrequency } from './frequency';
+import { midiToFrequency } from "./frequency";
 
 /** MIDI-Index 0–11 (chromatisch, C=0, C#=1, ..., H/B=11). */
 export const NOTE_INDEX = {
   C: 0,
-  'C#': 1,
+  "C#": 1,
   D: 2,
-  'D#': 3,
+  "D#": 3,
   E: 4,
   F: 5,
-  'F#': 6,
+  "F#": 6,
   G: 7,
-  'G#': 8,
+  "G#": 8,
   A: 9,
-  'A#': 10,
+  "A#": 10,
   H: 11,
 } as const;
 
@@ -71,14 +71,16 @@ export class Note {
   /** Oktave (C4 = MIDI 60 = Middle C). */
   readonly octave: number;
   /** Vorzeichen: '', '#' oder 'b' (international, notationssystemunabhängig). */
-  readonly accidental: '' | '#' | 'b';
+  readonly accidental: "" | "#" | "b";
 
   private constructor(midi: number) {
     this.midi = midi;
     this.frequency = midiToFrequency(midi);
-    this.noteIndex = ((midi % SEMITONES_PER_OCTAVE) + SEMITONES_PER_OCTAVE) % SEMITONES_PER_OCTAVE;
+    this.noteIndex =
+      ((midi % SEMITONES_PER_OCTAVE) + SEMITONES_PER_OCTAVE) %
+      SEMITONES_PER_OCTAVE;
     this.octave = midiToOctave(midi);
-    this.accidental = isBlackKey(this.noteIndex) ? '#' : '';
+    this.accidental = isBlackKey(this.noteIndex) ? "#" : "";
   }
 
   /**
@@ -96,6 +98,42 @@ export class Note {
   static fromIndexAndOctave(noteIndex: number, octave: number): Note {
     const midi = 12 * (octave + 1) + noteIndex;
     return new Note(midi);
+  }
+
+  /**
+   * Mapping von Notennamen (German: C D E F G A H) + optionalem Vorzeichen
+   * auf den chromatischen Index (0–11).
+   * @param name Notenname, z.B. "C", "D", "A", "H"
+   * @param accidental Vorzeichen: '', '#' oder 'b'
+   * @returns 0–11, oder -1 bei ungültigem Namen
+   */
+  static nameToIndex(name: string, accidental: "" | "#" | "b" = ""): number {
+    const base: Record<string, number> = {
+      C: 0,
+      D: 2,
+      E: 4,
+      F: 5,
+      G: 7,
+      A: 9,
+      H: 11,
+      B: 11, // Alternative für "B" (englisch)
+    };
+    const idx = base[name.toUpperCase()];
+    if (idx === undefined) return -1;
+    if (accidental === "#") return (idx + 1) % 12;
+    if (accidental === "b") return (idx + 11) % 12;
+    return idx;
+  }
+
+  /**
+   * Fabrikmethode aus Notenname + Oktave (German notation).
+   * @param name Notenname, z.B. "C", "D#", "Hb"
+   * @param octave Oktave (z.B. 4 für C4 = MIDI 60)
+   */
+  static fromNameAndOctave(name: string, octave: number): Note {
+    const noteIndex = Note.nameToIndex(name, "");
+    if (noteIndex < 0) throw new Error(`Ungültiger Notenname: ${name}`);
+    return Note.fromIndexAndOctave(noteIndex, octave);
   }
 
   /** true, wenn die Note ein Stammtone (weiße Taste) ist. */
