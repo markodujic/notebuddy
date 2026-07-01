@@ -71,19 +71,19 @@ Frame neue Props → nutzlos. Klassischer React-Native-Audio-Anti-Pattern.
 
 ### Erwartetes Ergebnis
 
-| Metrik | Status quo | Stufe A |
-|---|---|---|
-| Re-renders Screen | ~60/s | ~0 (nur Diskret-Events) |
-| JS-Thread-Last | Detection + Renders | Detection nur |
-| UI-Framerate | jankig | 60fps |
+| Metrik            | Status quo          | Stufe A                 |
+| ----------------- | ------------------- | ----------------------- |
+| Re-renders Screen | ~60/s               | ~0 (nur Diskret-Events) |
+| JS-Thread-Last    | Detection + Renders | Detection nur           |
+| UI-Framerate      | jankig              | 60fps                   |
 
 ---
 
-## Stufe C — Native AudioWorklet (Dev-Build ⚠️ nötig)
+## Stufe C — Native AudioWorklet (`AudioRuntime`) — ❌ verworfen
 
-### Voraussetzung
+### Verifizierte API
 
-`react-native-audio-api` bietet **eigene native AudioWorklets** (Web-Audio-API-Pfad):
+`react-native-audio-api@0.12.2` bietet native AudioWorklets:
 
 ```ts
 type AudioWorkletRuntime = 'AudioRuntime' | 'UIRuntime';
@@ -91,37 +91,61 @@ type AudioWorkletRuntime = 'AudioRuntime' | 'UIRuntime';
 context.createWorkletNode(
   callback: (audioData: Array<Float32Array>, channelCount: number) => void,
   bufferLength, inputChannelCount,
-  workletRuntime?: AudioWorkletRuntime  // 'AudioRuntime' = nativer Audio-Thread!
+  workletRuntime?: AudioWorkletRuntime
 )
 ```
 
-Der Callback läuft auf einem **dedizierten nativen Audio-Thread**, nicht JS, nicht UI.
+### Warum verworfen
 
-### Schritte
+`AudioRuntime` läuft auf einem **fremden nativen Thread** ohne Reanimated-Kontext.
+Dort funktionieren:
 
-1. **Spike:** `WorkletNode`-Implementation in `node_modules` lesen,
-   `'AudioRuntime'`-Verhalten verifizieren, SharedValue-Beschreibung klären.
-2. **AudioContext-Graph** aufbauen: Mic → `createWorkletNode('AudioRuntime')`.
-3. **MacLeod-Algorithmus** als Worklet-Callback portieren (rein funktional, Float32Array,
-   keine Klassen/`this`).
-4. **Native Thread → SharedValues** via `runOnUI`.
-5. **Dev-Build** (nativ!): `npm run verify:reanimated` → `eas build`.
-6. **Performance-Messung:** JS-Thread-Last vor/nach C vergleichen.
+- ❌ SharedValue `.value =` (braucht Reanimated-Runtime)
+- ❌ `runOnJS(...)` (braucht Reanimated-Runtime)
 
-### Warum C über B (Reanimated-Worklet)
-
-- `runOnWorklet` serialisiert `Float32Array` (2048 Samples × 20–60/s) → teuer.
-- Klassen-`this` (MacLeodPitchDetector) ist im Reanimated-Worklet nicht abbildbar.
-- Pre-allocated Buffers (GC-Druck-Optimierung) gehen im Reanimated-Modell verloren.
-- Native AudioWorklet verarbeitet Samples **im Entstehungs-Thread** → keine Brücke.
+→ Keine Kommunikation aus dem Callback möglich → Pitch-Erkennung unsichtbar.
 
 ---
 
-## Verwerfen: Stufe B (Reanimated-Worklet)
+## Stufe B — Worklet auf Reanimated-UI-Thread ✅ implementiert
 
-Nicht empfohlen — Serialisierungs-Overhead + Klassen-Refactoring ohne den vollen
-Gewinn von C. Dokumentiert als bewusst nicht gewählter Pfad.
+### Statt C verwenden wir `'UIRuntime'`
+
+Der Callback läuft auf dem **Reanimated-UI-Thread**. Dort sind SharedValue-Schreiben
+und `runOnJS` nativ verfügbar. Die Pitch-Detection (MacLeod) blockiert nicht mehr den
+JS-Thread — sie läuft auf dem UI-Thread.
+
+### Audio-Graph
+
+```
+AudioRecorder (Mic)
+  → connect(RecorderAdapterNode)
+  → connect(WorkletNode['UIRuntime'])
+     Callback auf Reanimated-UI-Thread:
+       1. RMS berechnen (rein funktional, inline)
+       2. MacLeod NSDF + Peaks + Interpolation (Factory, pre-alloc)
+       3. SharedValues direkt (.value =) → 0 Re-Renders
+       4. runOnJS(onFrame) für Diskret-Logik (Stability)
+```
+
+### Dateien
+
+1. `src/services/macleod-worklet.ts` — Rein funktionale Factory (worklet-safe,
+   pre-allocated Buffers via Closure, kein `this`).
+2. `src/services/audio-worklet-engine.ts` — AudioContext-Graph mit `UIRuntime`.
+3. `src/services/audio-engine.ts` — Dispatcher mit `USE_WORKLET_ENGINE` Flag:
+   - `true` → Stufe B (`useAudioWorkletEngine`, UI-Thread)
+   - `false` → Stufe A (`useAudioEngineJs`, JS-Thread, Fallback)
+
+### Ergebnis
+
+| Metrik                     | Stufe A             | Stufe B       |
+| -------------------------- | ------------------- | ------------- |
+| JS-Thread-Last             | Detection + Renders | Renders nur   |
+| Pitch-Detection-Thread     | JS                  | Reanimated-UI |
+| Re-Renders Screen          | ~0                  | ~0            |
+| SharedValue-Kompatibilität | ✅                  | ✅            |
 
 ---
 
-*Erstellt: 2026-06-28 · Status: Stufe A ✅ implementiert & validiert (TS clean, Lint clean, Verify ✅). Stufe C folgt.*
+_Erstellt: 2026-06-28 · Status: Stufe A ✅ implementiert. Stufe B ✅ implementiert (UIRuntime). Stufe C ❌ verworfen (AudioRuntime ohne Reanimated-Kontext)._
