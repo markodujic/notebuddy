@@ -6,18 +6,18 @@
 
 ## Entscheidungen
 
-| Thema | Entscheidung |
-|---|---|
-| **Pilot-Modus** | Note → Klavier (Audio-Eingabe) |
-| **Domain-Layer** | Framework-neutrale Logik 1:1 von Svelte nach TS portieren |
-| **Notensystem-Rendering** | Skia selbst gezeichnet (Default laut AGENTS.md) |
-| **Pitch-Detection** | Autocorrelation (MacLeod/YIN) auf `react-native-audio-api` |
-| **State Management** | Zustand |
-| **Notation** | 4 Systeme (German default, English, Solfège, Nordic) via Registry |
-| **Animationen** | Reanimated 4 |
-| **Umsetzungstakt** | Fundament (Phase 0 + 0.5 + 1) am Stück, dann iterativ |
-| **Bravura-Font** | Wird besorgt und eingebunden |
-| **Display-Modi** | Erst `badge` + `staff`, `grand` später |
+| Thema                     | Entscheidung                                                      |
+| ------------------------- | ----------------------------------------------------------------- |
+| **Pilot-Modus**           | Note → Klavier (Audio-Eingabe)                                    |
+| **Domain-Layer**          | Framework-neutrale Logik 1:1 von Svelte nach TS portieren         |
+| **Notensystem-Rendering** | Skia selbst gezeichnet (Default laut AGENTS.md)                   |
+| **Pitch-Detection**       | Autocorrelation (MacLeod/YIN) auf `react-native-audio-api`        |
+| **State Management**      | Zustand                                                           |
+| **Notation**              | 4 Systeme (German default, English, Solfège, Nordic) via Registry |
+| **Animationen**           | Reanimated 4                                                      |
+| **Umsetzungstakt**        | Fundament (Phase 0 + 0.5 + 1) am Stück, dann iterativ             |
+| **Bravura-Font**          | Wird besorgt und eingebunden                                      |
+| **Display-Modi**          | `badge` + `staff` + `grand` (alle implementiert)                  |
 
 ---
 
@@ -113,21 +113,21 @@
 
 Neue Props (rückwärtskompatibel):
 
-| Prop | Nutzung |
-|---|---|
-| `targetNote?: Note` | Zielnote gold/pulsierend |
-| `highlightNote?: Note` | Hervorgehobene Note |
-| `feedback?: 'correct'\|'incorrect'\|'too-high'\|'too-low'` | Bewertungs-Feedback |
-| `highlightRange?: Range` | Grüner Glow (Range-Finder) |
-| `keyLabels?: Record<number, string>` | Notennamen via Notation-System |
-| `greenKeys?: number[]` | Multi-Tasten-Highlight (Tutorial) |
-| `visibleRange?: Range` | Sichtbarer Ausschnitt |
+| Prop                                                       | Nutzung                           |
+| ---------------------------------------------------------- | --------------------------------- |
+| `targetNote?: Note`                                        | Zielnote gold/pulsierend          |
+| `highlightNote?: Note`                                     | Hervorgehobene Note               |
+| `feedback?: 'correct'\|'incorrect'\|'too-high'\|'too-low'` | Bewertungs-Feedback               |
+| `highlightRange?: Range`                                   | Grüner Glow (Range-Finder)        |
+| `keyLabels?: Record<number, string>`                       | Notennamen via Notation-System    |
+| `greenKeys?: number[]`                                     | Multi-Tasten-Highlight (Tutorial) |
+| `visibleRange?: Range`                                     | Sichtbarer Ausschnitt             |
 
 ### StaffView (neu, Skia)
 
 ```ts
 type StaffViewProps = {
-  clef: 'treble' | 'bass' | 'grand';
+  clef: "treble" | "bass" | "grand";
   displayNote?: { midi: number; color?: string };
   wrongNote?: { midi: number };
   showFeedback?: boolean;
@@ -143,11 +143,11 @@ type StaffViewProps = {
 
 ### Breakpoints
 
-| Breakpoint | Width | Charakteristik |
-|---|---|---|
-| `compact` | < 420 | Handy Portrait |
-| `medium` | 420–700 | Handy Landscape / kleines Tablet |
-| `expanded` | ≥ 700 | iPad / Desktop |
+| Breakpoint | Width   | Charakteristik                   |
+| ---------- | ------- | -------------------------------- |
+| `compact`  | < 420   | Handy Portrait                   |
+| `medium`   | 420–700 | Handy Landscape / kleines Tablet |
+| `expanded` | ≥ 700   | iPad / Desktop                   |
 
 ### Touch-Prinzipien
 
@@ -178,9 +178,10 @@ src/domain/music/notation/
 ```
 
 Interface:
+
 ```ts
 interface NotationSystem {
-  id: 'german' | 'english' | 'solfege' | 'nordic';
+  id: "german" | "english" | "solfege" | "nordic";
   label: string;
   noteNames: string[12];
   naturalNames: string[7];
@@ -193,4 +194,4 @@ interface NotationSystem {
 
 ---
 
-*Erstellt: 2026-06-26 · Version: 1.0.0*
+_Erstellt: 2026-06-26 · Version: 1.0.0_

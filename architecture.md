@@ -23,9 +23,9 @@ Diese Datei beschreibt eine sinnvolle Architektur für **notebuddy** auf Basis d
    - Keine zyklischen Abhängigkeiten zwischen Visualisierung und Audio.
 
 4. **Performance zuerst**
-    - `reanimated` / Skia / SVG für Animation und Visualisierung
-    - `react-native-audio-api` / `expo-speech-recognition` für Audio und Sprache
-    - minimale Re-Renders durch saubere Zustandsgrenzen
+   - `reanimated` / Skia / SVG für Animation und Visualisierung
+   - `react-native-audio-api` / `expo-speech-recognition` für Audio und Sprache
+   - minimale Re-Renders durch saubere Zustandsgrenzen
 
 ## Architekturübersicht
 
@@ -37,6 +37,7 @@ Verantwortlich für Routen, Layouts und Bildschirmwechsel.
 - `src/app/`
 
 Aufgaben:
+
 - App-Start
 - Screen-Navigation
 - Modals
@@ -47,6 +48,7 @@ Aufgaben:
 Verantwortlich für fachliche Funktionen.
 
 Beispiele:
+
 - Lernmodi
 - Audio-Übungen
 - Spracheingabe-Modi
@@ -54,6 +56,7 @@ Beispiele:
 - Einstellungen
 
 Aufgaben:
+
 - Zustand pro Feature
 - fachliche Regeln
 - Steuerung von Workflows
@@ -62,15 +65,15 @@ Aufgaben:
 
 Verantwortlich für Geräte- und Systemzugriffe.
 
-| API | Aufgabe |
-|-----|---------|
-| `react-native-audio-api` | Aufnahme / Wiedergabe |
-| `expo-speech-recognition` | Spracheingabe |
-| `expo-sqlite` | lokale Persistenz |
-| `expo-linking` | Deep Links |
-| `expo-web-browser` | externe Inhalte |
-| `expo-device` | Geräteerkennung |
-| `expo-constants` | Runtime-Konfiguration |
+| API                       | Aufgabe               |
+| ------------------------- | --------------------- |
+| `react-native-audio-api`  | Aufnahme / Wiedergabe |
+| `expo-speech-recognition` | Spracheingabe         |
+| `expo-sqlite`             | lokale Persistenz     |
+| `expo-linking`            | Deep Links            |
+| `expo-web-browser`        | externe Inhalte       |
+| `expo-device`             | Geräteerkennung       |
+| `expo-constants`          | Runtime-Konfiguration |
 
 **Wichtig:** Diese Schicht liefert nur Daten und Events, aber keine UI-Logik.
 
@@ -78,17 +81,17 @@ Verantwortlich für Geräte- und Systemzugriffe.
 
 Verantwortlich für Darstellung, Animation und Interaktion.
 
-| API / Lib | Aufgabe |
-|-----------|---------|
-| `@expo/ui` | native UI-Bausteine |
-| `@shopify/react-native-skia` | performante Visualisierungen |
-| `react-native-svg` | Vektor-Grafiken |
-| `react-native-reanimated` | Animationen |
-| `react-native-gesture-handler` | Touch- und Swipe-Gesten |
-| `expo-image` | optimierte Medienanzeige |
-| `expo-font` | Schriftarten / Notationsfonts |
-| `expo-symbols` | native Symbolik |
-| `expo-glass-effect` | visuelle Glaseffekte |
+| API / Lib                      | Aufgabe                       |
+| ------------------------------ | ----------------------------- |
+| `@expo/ui`                     | native UI-Bausteine           |
+| `@shopify/react-native-skia`   | performante Visualisierungen  |
+| `react-native-svg`             | Vektor-Grafiken               |
+| `react-native-reanimated`      | Animationen                   |
+| `react-native-gesture-handler` | Touch- und Swipe-Gesten       |
+| `expo-image`                   | optimierte Medienanzeige      |
+| `expo-font`                    | Schriftarten / Notationsfonts |
+| `expo-symbols`                 | native Symbolik               |
+| `expo-glass-effect`            | visuelle Glaseffekte          |
 
 ## Trennung von Grafik und Audio
 
@@ -97,6 +100,7 @@ Das wichtigste Architekturziel ist eine **saubere Entkopplung**.
 ### Audio-Schicht
 
 Die Audio-Schicht übernimmt:
+
 - Aufnahme
 - Wiedergabe
 - Tonerkennung
@@ -104,6 +108,7 @@ Die Audio-Schicht übernimmt:
 - Signalverarbeitung
 
 Sie sollte:
+
 - keine UI rendern
 - keine Animationen triggern, die vom Audio-Thread abhängen
 - ihre Ergebnisse nur als Zustandswerte oder Events bereitstellen
@@ -111,12 +116,14 @@ Sie sollte:
 ### Grafik-Schicht
 
 Die Grafik-Schicht übernimmt:
+
 - Noten-/Diagramm-Rendering
 - Animationen
 - Feedback-UI
 - visuelle Fortschrittsanzeigen
 
 Sie sollte:
+
 - keine direkten Audiooperationen ausführen
 - keine Audioanalyse berechnen
 - nur auf Zustandsänderungen reagieren
@@ -152,35 +159,65 @@ src/
 
 ## Rolle der installierten APIs im Zielsystem
 
-| Paket | Rolle |
-|------|------|
-| `expo-router` | Routing / Screens |
-| `react-native-audio-api` | Audio-Handling |
-| `expo-speech-recognition` | Spracheingabe |
-| `expo-sqlite` | Persistenz |
-| `expo-font` | Fonts / Notation |
-| `expo-image` | Medien |
-| `expo-linking` | Deep Links |
-| `expo-web-browser` | Externe Inhalte |
-| `expo-device` | Geräteabhängige Anpassung |
-| `expo-constants` | Runtime-Konfiguration |
-| `expo-splash-screen` | Startverhalten |
-| `expo-system-ui` | System-UI |
-| `expo-status-bar` | Statusbar |
-| `expo-symbols` | native Symbole |
-| `expo-glass-effect` | UI-Effekte |
-| `@expo/ui` | native Komponenten |
-| `@shopify/react-native-skia` | High-Performance-Visualisierung |
-| `react-native-reanimated` | Animationen |
-| `react-native-gesture-handler` | Gesten |
-| `react-native-svg` | Vektorformen |
-| `@tonejs/midi` | MIDI-Verarbeitung |
-| `fft.js` | Frequenzanalyse |
-| `vexflow` | Musiknotation |
+| Paket                          | Rolle                           |
+| ------------------------------ | ------------------------------- |
+| `expo-router`                  | Routing / Screens               |
+| `react-native-audio-api`       | Audio-Handling                  |
+| `expo-speech-recognition`      | Spracheingabe                   |
+| `expo-sqlite`                  | Persistenz                      |
+| `expo-font`                    | Fonts / Notation                |
+| `expo-image`                   | Medien                          |
+| `expo-linking`                 | Deep Links                      |
+| `expo-web-browser`             | Externe Inhalte                 |
+| `expo-device`                  | Geräteabhängige Anpassung       |
+| `expo-constants`               | Runtime-Konfiguration           |
+| `expo-splash-screen`           | Startverhalten                  |
+| `expo-system-ui`               | System-UI                       |
+| `expo-status-bar`              | Statusbar                       |
+| `expo-symbols`                 | native Symbole                  |
+| `expo-glass-effect`            | UI-Effekte                      |
+| `@expo/ui`                     | native Komponenten              |
+| `@shopify/react-native-skia`   | High-Performance-Visualisierung |
+| `react-native-reanimated`      | Animationen                     |
+| `react-native-gesture-handler` | Gesten                          |
+| `react-native-svg`             | Vektorformen                    |
+| `@tonejs/midi`                 | MIDI-Verarbeitung               |
+| `fft.js`                       | Frequenzanalyse                 |
+| `vexflow`                      | Musiknotation                   |
+
+## Implementierte Komponenten (Stand 2026-07-01)
+
+### Skia-Rendering
+
+| Komponente                                  | Beschreibung                                                                             |
+| ------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `components/staff/staff-view.tsx`           | Notensystem mit Pergament-Textur, Oval-Notenköpfen, Stems, Guide-Linien, Blink/Fade/Glow |
+| `components/staff/grand-staff-view.tsx`     | Doppel-System (Violin+Bass) mit Akkolade                                                 |
+| `components/piano-keyboard.tsx`             | 88-Tasten Klaviatur mit 3D-Perspektive + Zoom                                            |
+| `components/feedback/pitch-ring.tsx`        | Audio-Feedback Ring (Stabilität, Volume)                                                 |
+| `components/effects/particle-explosion.tsx` | Partikel-Effekt bei falschen Antworten                                                   |
+
+### Animationen (Reanimated v4)
+
+- Fly-In mit Motion-Blur (skewX)
+- Breathing-Pulse für Listening-Phase
+- Blink bei falschen Noten (0.3↔1.0 opacity)
+- Fade-In + Glow bei korrekten Noten
+- Fly-Out (correct/wrong) im Range-Finder
+
+### Modus-Screens
+
+| Screen                  | Flow                                                  |
+| ----------------------- | ----------------------------------------------------- |
+| `app/note-to-piano.tsx` | Note anzeigen → Mikrofon → Pitch-Detection → Feedback |
+| `app/piano-to-note.tsx` | Taste drücken → NoteButtons → Feedback                |
+| `app/visualize.tsx`     | Note anzeigen → Staff tippen → Feedback               |
+| `app/range-finder.tsx`  | Adaptiver Test → Range bestimmen → Übernehmen         |
+| `app/tutorial.tsx`      | 4-Phasen: Gruppen animieren → nachspielen             |
 
 ## Ableitung aus der Referenz-App
 
-Die untersuchte `notenlern-app` zeigt, dass diese Architektur besonders gut für Lern-Apps geeignet ist:
+Die alte `notenlern-app` (Svelte, Pfad: `C:\Users\dujic\Desktop\Notenlern-app`) zeigt, dass diese Architektur besonders gut für Lern-Apps geeignet ist:
 
 - Audio-Feedback ist ein eigener Flow.
 - Visualisierung ist ein eigener Flow.

@@ -114,4 +114,35 @@
 
 ---
 
-_Erstellt: 2026-07-01 · Status: In Implementierung (4.1 zuerst)_
+## Aktueller Stand (Session 2026-07-01)
+
+Alle 4 Modi sind implementiert und funktionsfähig:
+
+| Modus              | Status    | Bemerkung                                              |
+| ------------------ | --------- | ------------------------------------------------------ |
+| 4.1 Klavier → Note | ✅ Fertig | NoteButtons + Keyboard + Swipe-Geste                   |
+| 4.2 Visualize      | ✅ Fertig | InteractiveStaffView + Feedback                        |
+| 4.3 Tutorial       | ✅ Fertig | 4-Phasen State-Machine                                 |
+| 4.4 RangeFinder    | ✅ Fertig | Adaptiver Algorithmus + Timer + Fly-In/Out Animationen |
+
+### Erweiterte Features (über Plan hinaus)
+
+- **StaffView 1:1 aus alter App** — Pergament-Textur, Oval-Notenköpfe, Stems, Guide-Linien, Blink/Fade/Glow Animationen, Hover-Indikator
+- **GrandStaffView** — Doppel-System (Violin+Bass) mit Akkolade für Note-to-Piano
+- **3 Display-Modi** in Note-to-Piano: 🔤 Text, 🎼 System, 🎹 Grand-Staff
+- **Range-Finder Layout** — Note-Badge + Staff nebeneinander, Fly-In/Fly-Out CSS-Animationen
+
+### Verbleibende Aufgaben (Phase 5+)
+
+| Aufgabe                 | Aufwand | Bemerkung                                           |
+| ----------------------- | ------- | --------------------------------------------------- |
+| Settings Modal          | Mittel  | Clef, Range-Slider, Exercise-Count, Notation-System |
+| SpeechInput (Visualize) | Hoch    | `expo-speech-recognition` für 🎤 Modus              |
+| TonePlayer              | Niedrig | Audio-Playback für Feedback-Töne                    |
+| Hints + ErrorStats      | Niedrig | Lernhilfen + Fehlerstatistik                        |
+| Weighting UI            | Niedrig | Adaptive Gewichtung visualisieren                   |
+| CompactNoteView         | Niedrig | Kompakte Noten-Anzeige                              |
+| Dual-Theme (Light/Dark) | Mittel  | Theme-Toggle im Header                              |
+| SQLite-Persistenz       | Mittel  | Weighting/Statistik speichern                       |
+
+_Erstellt: 2026-07-01 · Status: Phase 4 komplett, Erweiterungen laufend_

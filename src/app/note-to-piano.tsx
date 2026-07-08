@@ -2,7 +2,7 @@
  * Note → Klavier Screen (Pilot-Modus, Audio-Eingabe).
  *
  * Flow:
- *   1. Note anzeigen (Badge oder Staff)
+ *   1. Note anzeigen (Badge, Staff oder GrandStaff)
  *   2. Audio-Engine startet
  *   3. User spielt/singt den Ton
  *   4. Pitch-Detection + Stability-Check
@@ -11,9 +11,6 @@
  *
  * ⚠️ Architektur (Stufe A, siehe PITCH-DATAFLOW-PLAN.md):
  * Kontinuierliche Audio-Werte laufen über SharedValues → 0 Re-Renders pro Frame.
- * Der Screen re-rendert NUR bei echten Phasen-Wechseln (asking→listening→feedback→done),
- * nicht mehr 60×/Sekunde. Stability-Progress und Volume sind in SharedValues,
- * `handleAudioFrame` macht nur noch Diskret-Logik (Stability-Tracking + Submit).
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -28,6 +25,7 @@ import {
   type KeyboardFeedback,
   type KeyboardZoomMode,
 } from "@/components/piano-keyboard";
+import { GrandStaffView } from "@/components/staff/grand-staff-view";
 import { StaffView } from "@/components/staff/staff-view";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
@@ -47,11 +45,10 @@ import { StabilityTracker } from "@/services/stability-tracker";
 import { useAppStore } from "@/stores/app-store";
 import { useSessionStore } from "@/stores/session-store";
 
-type DisplayMode = "badge" | "staff";
+type DisplayMode = "badge" | "staff" | "grand";
 type ScreenPhase = "asking" | "listening" | "feedback" | "done";
 
 // Keyframes für "Atmen"-Animation während Listening-Phase.
-// Reanimated v4 CSS Animation – läuft komplett auf dem UI-Thread, 0 Re-Renders.
 const breathingPulse = {
   from: { transform: [{ scale: 1 }], opacity: 0.85 },
   "50%": { transform: [{ scale: 1.04 }], opacity: 1 },
@@ -59,8 +56,6 @@ const breathingPulse = {
 } as const;
 
 // Keyframes für Fly-In mit simuliertem Motion-Blur bei neuen Fragen.
-// skewX während der Bewegung erzeugt einen Richtungs-Stretch (Motion-Blur-Look).
-// Überschwingung am Ende für ein "Snappy" Gefühl.
 const flyInWithBlur = {
   from: {
     transform: [{ translateY: 60 }, { scale: 0.7 }, { skewX: "12deg" }],
@@ -79,6 +74,12 @@ const flyInWithBlur = {
     opacity: 1,
   },
 } as const;
+
+const DISPLAY_MODE_ICONS: Record<DisplayMode, string> = {
+  badge: "🔤",
+  staff: "🎼",
+  grand: "🎹",
+};
 
 export default function NoteToPianoScreen() {
   const theme = useTheme();
@@ -101,36 +102,26 @@ export default function NoteToPianoScreen() {
   // Local state (nur echte Phasen-Wechsel, nicht pro Frame)
   const [displayMode, setDisplayMode] = useState<DisplayMode>("badge");
   const [phase, setPhase] = useState<ScreenPhase>("asking");
-  const [feedbackVisible, setFeedbackVisible] = useState(false);
   const [feedbackCorrect, setFeedbackCorrect] = useState(false);
   const [wrongMidi, setWrongMidi] = useState<number | null>(null);
-  // Partikel-Explosion bei falscher Antwort
   const [explosionTrigger, setExplosionTrigger] = useState(false);
-
-  // Keyboard-Zoom: Bei jeder neuen Aufgabe 2 Sekunden alle 88 Tasten zeigen,
-  // danach in den Fokus-Bereich reinzoomen.
   const [keyboardZoomMode, setKeyboardZoomMode] =
     useState<KeyboardZoomMode>("overview");
 
-  // Refs für Audio-Verarbeitung (Diskret-Logik, kein Re-Render)
+  // Refs für Audio-Verarbeitung
   const stabilityRef = useRef<StabilityTracker | null>(null);
   const silenceFramesRef = useRef(0);
   const isAnsweringRef = useRef(false);
-  // Silence Gate: Initial müssen ~50ms Stille erkannt werden, bevor Pitch akzeptiert wird.
-  // Verhindert Carry-Over von der vorherigen Antwort.
   const silenceGatePassedRef = useRef(false);
   const gateSilenceCountRef = useRef(0);
   const SILENCE_GATE_FRAMES = 3;
 
-  // Refs für phase und targetMidi, damit der Audio-Callback stabil bleibt
-  // (ohne ihn bei jedem Render neu zu erzeugen)
   const phaseRef = useRef(phase);
   const targetMidiRef = useRef<number | null>(null);
   useEffect(() => {
     phaseRef.current = phase;
   }, [phase]);
 
-  // Target Note für aktuelle Aufgabe
   const targetMidi = session.currentExercise?.targetNote.midi ?? null;
   const targetName =
     targetMidi !== null
@@ -140,14 +131,11 @@ export default function NoteToPianoScreen() {
     targetMidiRef.current = targetMidi;
   }, [targetMidi]);
 
-  // Submit-Ref (vermeidet Dependency-Cycle)
   const submitAnswerRef = useRef<
     ((detectedMidi: number, frequency: number) => void) | null
   >(null);
 
-  // ── Audio Callback (Diskret-Logik: Stability-Tracking + Submit) ──
-  // Läuft pro Frame, aber kommuniziert NUR über SharedValues und
-  // (selten) submitAnswerRef → KEIN setState pro Frame.
+  // ── Audio Callback ──
   const handleAudioFrame = useCallback(
     (frame: PitchFrame) => {
       const currentPhase = phaseRef.current;
@@ -157,9 +145,6 @@ export default function NoteToPianoScreen() {
       if (currentTargetMidi === null) return;
       if (isAnsweringRef.current) return;
 
-      // ── Silence Gate (initial) ──
-      // Vor dem ersten Pitch müssen ~50ms Stille erkannt werden,
-      // um Carry-Over von der vorherigen Antwort zu verhindern.
       if (!silenceGatePassedRef.current) {
         if (frame.frequency === 0 || frame.rms < RMS_GATE_THRESHOLD) {
           gateSilenceCountRef.current += 1;
@@ -172,7 +157,6 @@ export default function NoteToPianoScreen() {
         return;
       }
 
-      // ── Stille-Frame ──
       if (frame.frequency === 0) {
         silenceFramesRef.current += 1;
         if (silenceFramesRef.current >= 5) {
@@ -184,12 +168,10 @@ export default function NoteToPianoScreen() {
 
       silenceFramesRef.current = 0;
 
-      // ── Pitch erkannt ──
       const detectedMidi = Math.round(
         12 * Math.log2(frame.frequency / 440) + 69,
       );
 
-      // Stability-Tracker initialisieren falls nötig
       if (!stabilityRef.current) {
         stabilityRef.current = new StabilityTracker({
           targetMidi: currentTargetMidi,
@@ -198,8 +180,6 @@ export default function NoteToPianoScreen() {
         });
       }
 
-      // ⭐ KORREKTUR: Stabilität für JEDEN Ton tracken (isMatch immer true),
-      // wie die alte App. Erst nach Stability wird geprüft, ob die Note korrekt ist.
       const result = stabilityRef.current.update(
         detectedMidi,
         true,
@@ -207,7 +187,6 @@ export default function NoteToPianoScreen() {
       );
       values.setStabilityProgress(result.progress);
 
-      // Stabil → erst JETZT correctness prüfen
       if (result.isStable) {
         const isCorrect = matchesNote(
           frame.frequency,
@@ -224,7 +203,6 @@ export default function NoteToPianoScreen() {
     [toleranceCents, stabilityMs, values],
   );
 
-  // ── Audio Engine (schreibt kontinuierliche Werte in SharedValues) ──
   const audio = useAudioEngine(values, handleAudioFrame);
 
   // ── Antwort einreichen ──
@@ -241,7 +219,6 @@ export default function NoteToPianoScreen() {
       setWrongMidi(correct ? null : detectedMidi);
       if (!correct) {
         setExplosionTrigger(false);
-        // Microtask: State-Wechsel erzwingt Neu-Start der Animation
         setTimeout(() => setExplosionTrigger(true), 0);
       }
 
@@ -258,24 +235,19 @@ export default function NoteToPianoScreen() {
         }
       }, delay);
     },
-    [session, audio, notation],
+    [session, audio],
   );
 
-  // submitAnswer in Ref halten (für stabilen Audio-Callback)
   useEffect(() => {
     submitAnswerRef.current = submitAnswer;
   }, [submitAnswer]);
 
   // ── Neue Aufgabe → Koordinierte Timeline ──
-  // t=0:            Keyboard = Overview (alle 88 Tasten), Refs reset
-  // t=2000ms:       Keyboard = Focus → Zoom-Animation startet
-  // t=2000ms+ZOOM:  Listening aktivieren (Mikrofon + Pitch-Detection)
   const OVERVIEW_DURATION_MS = 2000;
 
   useEffect(() => {
     if (phase !== "asking" || targetMidi === null) return;
 
-    // Refs/values resetten
     isAnsweringRef.current = false;
     silenceFramesRef.current = 0;
     silenceGatePassedRef.current = false;
@@ -284,15 +256,12 @@ export default function NoteToPianoScreen() {
     values.reset();
     setWrongMidi(null);
 
-    // Keyboard = Overview (alle 88 Tasten)
     setKeyboardZoomMode("overview");
 
-    // t=2000ms: Focus → Zoom-Animation startet
     const focusTimer = setTimeout(() => {
       setKeyboardZoomMode("focus");
     }, OVERVIEW_DURATION_MS);
 
-    // t=2000ms+ZOOM: Listening aktivieren (erst nach Abschluss des Zooms)
     const listenTimer = setTimeout(() => {
       setPhase("listening");
       audio.startListening();
@@ -304,10 +273,6 @@ export default function NoteToPianoScreen() {
     };
   }, [phase, targetMidi, audio, values]);
 
-  // ── Cleanup (nur Unmount, nicht pro Render) ──
-  // `audio` ist jetzt memoisiert (useMemo in useAudioEngine), aber defensiv
-  // auf [] setzen, damit der Cleanup nie versehentlich bei Re-Renders feuert
-  // und das Mikrofon stoppt. stopListening ist stabil (useCallback, []-Deps).
   const { stopListening } = audio;
   useEffect(() => {
     return () => {
@@ -315,7 +280,6 @@ export default function NoteToPianoScreen() {
     };
   }, [stopListening]);
 
-  // ── Session starten beim ersten Mount ──
   useEffect(() => {
     if (!session.session) {
       session.startSession("note-to-piano", {
@@ -327,7 +291,6 @@ export default function NoteToPianoScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Keyboard Feedback Mapping
   const keyboardFeedback: KeyboardFeedback | null =
     phase === "feedback" ? (feedbackCorrect ? "correct" : "incorrect") : null;
 
@@ -362,9 +325,9 @@ export default function NoteToPianoScreen() {
           </ThemedText>
         </ThemedView>
 
-        {/* Display Mode Toggle */}
+        {/* Display Mode Toggle (3 Modi wie alte App: 🔤 🎼 🎹) */}
         <View style={styles.modeToggle}>
-          {(["badge", "staff"] as const).map((mode) => (
+          {(["badge", "staff", "grand"] as const).map((mode) => (
             <Pressable
               key={mode}
               onPress={() => setDisplayMode(mode)}
@@ -374,7 +337,7 @@ export default function NoteToPianoScreen() {
               ]}
             >
               <ThemedText type="small" style={styles.modeChipText}>
-                {mode === "badge" ? "Text" : "System"}
+                {DISPLAY_MODE_ICONS[mode]}
               </ThemedText>
             </Pressable>
           ))}
@@ -382,7 +345,7 @@ export default function NoteToPianoScreen() {
 
         {/* Note Display */}
         <ThemedView style={styles.displayCard}>
-          {/* Partikel-Explosion bei falscher Antwort */}
+          {/* Partikel-Explosion bei falscher Antwort (nur badge modus) */}
           {displayMode === "badge" && (
             <ParticleExplosion
               trigger={explosionTrigger}
@@ -397,14 +360,12 @@ export default function NoteToPianoScreen() {
               style={[
                 styles.badgeContainer,
                 {
-                  // Fly-In bei jeder neuen Frage (key-Wechsel startet Animation neu)
                   animationName: flyInWithBlur,
                   animationDuration: "600ms",
                   animationTimingFunction: "ease-out",
                   animationFillMode: "both",
                 },
                 phase === "listening" && {
-                  // "Atmen" übernimmt nach dem Fly-In (gleicher Name = Überschreibung)
                   animationName: breathingPulse,
                   animationDuration: "1500ms",
                   animationTimingFunction: "ease-in-out",
@@ -430,13 +391,30 @@ export default function NoteToPianoScreen() {
                   : "Spiele oder singe diese Note"}
               </ThemedText>
             </Animated.View>
-          ) : (
+          ) : displayMode === "staff" ? (
             <View style={styles.staffContainer}>
               <StaffView
                 clef={clef}
                 displayMidi={targetMidi}
                 width={isCompact ? 280 : 340}
               />
+              <ThemedText
+                type="small"
+                themeColor="textSecondary"
+                style={styles.staffHint}
+              >
+                {targetName}
+              </ThemedText>
+            </View>
+          ) : (
+            // Grand Staff: Violin + Bass mit Akkolade
+            <View style={styles.staffContainer}>
+              {targetMidi !== null && (
+                <GrandStaffView
+                  midi={targetMidi}
+                  width={isCompact ? 280 : 340}
+                />
+              )}
               <ThemedText
                 type="small"
                 themeColor="textSecondary"
@@ -503,6 +481,7 @@ const styles = StyleSheet.create({
   },
   modeChipText: {
     opacity: 0.9,
+    fontSize: 16,
   },
   displayCard: {
     alignItems: "center",

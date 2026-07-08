@@ -22,11 +22,11 @@ import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { BottomTabInset, MaxContentWidth, Spacing } from "@/constants/theme";
 import {
-    LEARNING_CONFIG,
-    getNotation,
-    getNoteStaffPosition,
-    positionsMatch,
-    type StaffPosition,
+  LEARNING_CONFIG,
+  getNotation,
+  getNoteStaffPosition,
+  positionsMatch,
+  type StaffPosition,
 } from "@/domain";
 import { useBreakpoint } from "@/hooks/use-breakpoint";
 import { useTheme } from "@/hooks/use-theme";
@@ -217,10 +217,11 @@ export default function VisualizeScreen() {
               wrongMidi={
                 wrongPosition
                   ? (() => {
-                      // Wrong-Position in MIDI umwandeln für StaffView
-                      // StaffView nutzt MIDI → Position Mapping
-                      // Für falsche Position nutzen wir das wrongMidi Prop direkt
-                      return null;
+                      // StaffView akzeptiert MIDI für wrongMidi.
+                      // Wir haben eine StaffPosition, brauchen aber MIDI.
+                      // Da wir die Note nicht eindeutig kennen (Position ohne Vorzeichen),
+                      // geben wir die Target-MIDI als Platzhalter — visuell rot.
+                      return targetMidi;
                     })()
                   : null
               }

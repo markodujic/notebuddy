@@ -1,6 +1,16 @@
 # notebuddy 👋
 
-Ear-training / note-learning app built with **Expo SDK 56** (React Native 0.85), Reanimated 4, Skia, and `react-native-audio-api` for live pitch detection. Ported from a Svelte reference app.
+Ear-training / note-learning app built with **Expo SDK 56** (React Native 0.85), Reanimated 4, Skia, and `react-native-audio-api` for live pitch detection. Ported from a Svelte reference app (`C:\Users\dujic\Desktop\Notenlern-app`).
+
+## Features (alle 4 Modi implementiert)
+
+| Modus                   | Beschreibung                                                                |
+| ----------------------- | --------------------------------------------------------------------------- |
+| 🎹 **Note → Klavier**   | Note anzeigen → singen/spielen → Pitch-Detection (3 Display-Modi: 🔤 🎼 🎹) |
+| 🎹 **Klavier → Note**   | Taste drücken → Notennamen wählen (Swipe für ♯/♭)                           |
+| 🎼 **Visualize**        | Notenname anzeigen → Position im System tippen                              |
+| 📏 **Tonumfang-Finder** | Adaptiver Test mit Timer → sicheren Bereich bestimmen                       |
+| 📚 **Tutorial**         | 4 Phasen: 2er/3er-Gruppen animieren → nachspielen                           |
 
 ## Tech stack
 
@@ -37,12 +47,14 @@ eas build --profile development --platform ios
 
 ## Project docs
 
-| File | Content |
-|------|---------|
-| `architecture.md` | Target architecture (audio ⇄ graphics decoupling) |
-| `PLAN.md` | Implementation plan & phases |
-| `PITFALLS.md` | Known pitfalls & lessons learned |
-| `DEBUGGING` | Debugging log of past issues |
+| File                           | Content                                           |
+| ------------------------------ | ------------------------------------------------- |
+| `architecture.md`              | Target architecture (audio ⇄ graphics decoupling) |
+| `PLAN.md`                      | Implementation plan & phases                      |
+| `PHASE-4-PLAN.md`              | Phase 4: 4 Modi + aktueller Stand                 |
+| `PITCH-DATAFLOW-PLAN.md`       | Pitch-Detection Architektur (Stage A/B/C)         |
+| `PITFALLS.md`                  | Known pitfalls & lessons learned                  |
+| `DEBUGGING`                    | Debugging log of past issues                      |
 | `REANIMATED-WORKLETS-SETUP.md` | Reanimated + Worklets setup & dev-build checklist |
 
 ## Troubleshooting build / install issues

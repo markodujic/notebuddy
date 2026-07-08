@@ -2,6 +2,27 @@
 
 Read the exact versioned docs at https://docs.expo.dev/versions/v56.0.0/ before writing any code.
 
+## Referenz-App (notenlern-app)
+
+Die alte Svelte-basierte notenlern-app liegt unter:
+`C:\Users\dujic\Desktop\Notenlern-app`
+
+Quellcode-Struktur:
+
+- `src/App.svelte` — Hauptkomponente mit allen Modi (Note-to-Piano, Piano-to-Note, Visualize, RangeFinder, Tutorial)
+- `src/ui/staff/` — StaffView.svelte, InteractiveStaffView.svelte, GrandStaffView.svelte, CompactNoteView.svelte
+- `src/ui/keyboard/KeyboardView.svelte`
+- `src/ui/controls/` — ModeSwitch, Settings, NoteButtons
+- `src/ui/feedback/` — Hints, ErrorStats, AudioFeedback
+- `src/ui/tutorial/TutorialView.svelte`
+- `src/learning/` — RangeFinder.ts, Session.ts, Exercise.ts, Evaluator.ts, Weighting.ts
+- `src/music/` — Note.ts, Range.ts, GermanNotation.ts, Mapping.ts
+- `src/audio/` — AudioEngine.ts, Stability.ts, TonePlayer.ts
+- `src/input/` — PointerInput.ts, SpeechInput.ts, TextInput.ts
+- `src/utils/constants.ts` — Alle Konstanten (StaffPosition, ClefType, etc.)
+
+notebuddy ist die React-Native-/Expo-Portierung dieser App.
+
 ## Skill-Priorität
 
 Für dieses Projekt sollen bei passenden Aufgaben die installierten Skills bevorzugt werden, insbesondere:
