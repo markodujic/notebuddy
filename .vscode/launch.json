@@ -1,0 +1,20 @@
+{
+  // Use React Native's built-in DevTools for debugging (RN 0.85+):
+  //   Shake device → "Open React DevTools"
+  // The Element Inspector "jump to source" is handled by REACT_EDITOR=code
+  // in metro.config.js — no VS Code attach needed.
+  "configurations": [
+    {
+      "name": "Attach to Hermes (Chrome)",
+      "type": "chrome",
+      "request": "attach",
+      "port": 8081,
+      "sourceMaps": true,
+      "webRoot": "${workspaceFolder}",
+      "sourceMapPathOverrides": {
+        "webpack:///./~/*": "${webRoot}/node_modules/*",
+        "webpack:///../*": "${webRoot}/*"
+      }
+    }
+  ]
+}
