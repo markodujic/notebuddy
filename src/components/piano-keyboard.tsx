@@ -1,4 +1,4 @@
-import { Canvas, Group, Rect, RoundedRect } from "@shopify/react-native-skia";
+import { Canvas, Group, Rect } from "@shopify/react-native-skia";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import {
   LayoutChangeEvent,
@@ -438,12 +438,11 @@ export function PianoKeyboard({
             {whiteKeys.map((key, index) => (
               <Group key={key.midi}>
                 {/* Weiße Taste – Hauptkörper */}
-                <RoundedRect
+                <Rect
                   x={index * keyWidth}
                   y={0}
                   width={keyWidth}
                   height={pianoHeight}
-                  r={2}
                   color={resolveKeyFill(
                     key,
                     false,
@@ -452,21 +451,19 @@ export function PianoKeyboard({
                   )}
                 />
                 {/* Frontkante – dunkler (Tiefe-Simulation bei 3D-Neigung) */}
-                <RoundedRect
+                <Rect
                   x={index * keyWidth}
                   y={pianoHeight - frontFaceHeight}
                   width={keyWidth}
                   height={frontFaceHeight}
-                  r={2}
                   color={resolveFrontFaceFill(key, false, isDimmed(key.midi))}
                 />
                 {/* Outline */}
-                <RoundedRect
+                <Rect
                   x={index * keyWidth}
                   y={0}
                   width={keyWidth}
                   height={pianoHeight}
-                  r={2}
                   color="rgba(0,0,0,0.2)"
                   style="stroke"
                   strokeWidth={1}
@@ -489,17 +486,16 @@ export function PianoKeyboard({
               );
             })}
 
-            {/* C2+C3: rounded black keys with shadow */}
+            {/* C2+C3: black keys with shadow */}
             {blackKeys.map((key) => {
               const x = getBlackLeft(whiteKeys, keyWidth, key);
               return (
                 <Group key={key.midi}>
-                  <RoundedRect
+                  <Rect
                     x={x}
                     y={0}
                     width={blackKeyWidth}
                     height={blackKeyHeight}
-                    r={1.5}
                     color={resolveKeyFill(
                       key,
                       true,
@@ -508,12 +504,11 @@ export function PianoKeyboard({
                     )}
                   />
                   {/* Schwarze Taste Frontkante */}
-                  <RoundedRect
+                  <Rect
                     x={x}
                     y={blackKeyHeight - frontFaceHeight * 0.6}
                     width={blackKeyWidth}
                     height={frontFaceHeight * 0.6}
-                    r={1}
                     color={resolveFrontFaceFill(key, true, isDimmed(key.midi))}
                   />
                 </Group>
@@ -561,7 +556,6 @@ const styles = StyleSheet.create({
   keyboardViewport: {
     position: "relative",
     overflow: "hidden",
-    borderRadius: 24,
     width: "100%",
     alignSelf: "stretch",
   },
