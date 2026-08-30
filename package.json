@@ -61,6 +61,8 @@
     "emu": "cmd /c scripts\\start-emulator.bat",
     "emu:cold": "cmd /c scripts\\start-emulator.bat Medium_Phone_API_36.1 --cold",
     "android:debug": "cmd /c scripts\\run-android-debug.bat",
+    "android:slim": "cmd /c scripts\\build-android-slim.bat x86_64",
+    "android:slim:arm": "cmd /c scripts\\build-android-slim.bat arm64-v8a",
     "audio:copy": "cmd /c scripts\\copy-audio-binaries.bat",
     "penpot:sync": "node scripts/penpot-sync.mjs"
   },

@@ -24,6 +24,25 @@ scripts\start-emulator.bat Medium_Phone_API_36.1 --cold
 scripts\run-android-debug.bat
 ```
 
+### Schlanker Dev-Build (nur eine ABI, ohne Metro-Start) – Standard
+
+```cmd
+:: Emulator (x86_64) – Standardweg für die Entwicklung
+npm run android:slim
+
+:: Physisches Gerät (ARM)
+npm run android:slim:arm
+
+:: Direkter Aufruf mit ABI / adb-Serial
+scripts\build-android-slim.bat x86_64 emulator-5554
+```
+
+- Baut nur die angegebene Architektur → deutlich kleineres APK und schnellere
+  Builds (x86_64 nur ca. 1/3 der Größe gegenüber allen 4 ABIs).
+- Installiert automatisch, startet aber **kein** Metro → danach `npx expo start`.
+- **Achtung:** x86_64-Builds laufen nur auf x86_64-Emulatoren, arm64-v8a-Builds
+  nur auf ARM-Geräten. Vor jedem Dev-Build: `npm run verify:reanimated`.
+
 ### Audio-Binaries kopieren (nur nach `npm install`)
 
 ```cmd
