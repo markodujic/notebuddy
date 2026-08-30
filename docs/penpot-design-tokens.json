@@ -1,0 +1,128 @@
+{
+  "$schema": "https://design-tokens.github.io/community-group/format/",
+  "$description": "notebuddy Design Tokens — Referenz für Penpot. Diese Werte stammen aus src/constants/theme.ts, layout.ts, music-font.ts und global.css.",
+  "color": {
+    "light": {
+      "text": { "$value": "#000000", "$type": "color" },
+      "background": { "$value": "#ffffff", "$type": "color" },
+      "backgroundElement": { "$value": "#F0F0F3", "$type": "color" },
+      "backgroundSelected": { "$value": "#E0E1E6", "$type": "color" },
+      "textSecondary": { "$value": "#60646C", "$type": "color" }
+    },
+    "dark": {
+      "text": { "$value": "#ffffff", "$type": "color" },
+      "background": { "$value": "#000000", "$type": "color" },
+      "backgroundElement": { "$value": "#212225", "$type": "color" },
+      "backgroundSelected": { "$value": "#2E3135", "$type": "color" },
+      "textSecondary": { "$value": "#B0B4BA", "$type": "color" }
+    },
+    "parchment": {
+      "light": {
+        "bg": { "$value": "#fdf6e3", "$type": "color" },
+        "fiber1": { "$value": "#c4a35a", "$type": "color" },
+        "fiber2": { "$value": "#b8976a", "$type": "color" },
+        "staffLine": { "$value": "#000000", "$type": "color" },
+        "noteHead": { "$value": "#000000", "$type": "color" },
+        "clef": { "$value": "#000000", "$type": "color" }
+      },
+      "dark": {
+        "bg": { "$value": "#1e1e32", "$type": "color" },
+        "fiber1": { "$value": "#3a3a55", "$type": "color" },
+        "fiber2": { "$value": "#333350", "$type": "color" },
+        "staffLine": { "$value": "#e0e0e0", "$type": "color" },
+        "noteHead": { "$value": "#e0e0e0", "$type": "color" },
+        "clef": { "$value": "#d0d0d0", "$type": "color" }
+      }
+    },
+    "feedback": {
+      "correct": { "$value": "#22c55e", "$type": "color" },
+      "correctGlow": { "$value": "rgba(34, 197, 94, 0.8)", "$type": "color" },
+      "wrong": { "$value": "#ef4444", "$type": "color" },
+      "wrongBlink": { "$value": "#8b0000", "$type": "color" },
+      "hoverFill": { "$value": "rgba(102, 126, 234, 0.3)", "$type": "color" },
+      "hoverStroke": { "$value": "rgba(102, 126, 234, 0.8)", "$type": "color" }
+    }
+  },
+  "typography": {
+    "fontFamily": {
+      "display": { "$value": "Spline Sans, Inter, system-ui, sans-serif", "$type": "fontFamilies" },
+      "mono": { "$value": "ui-monospace, SFMono-Regular, Menlo, monospace", "$type": "fontFamilies" },
+      "rounded": { "$value": "SF Pro Rounded, system-ui, sans-serif", "$type": "fontFamilies" },
+      "serif": { "$value": "Georgia, Times New Roman, serif", "$type": "fontFamilies" },
+      "bravura": { "$value": "Bravura (SMuFL music notation font)", "$type": "fontFamilies" }
+    },
+    "scale": {
+      "title": {
+        "compact": { "$value": 34, "$type": "fontSizes", "unit": "px" },
+        "medium": { "$value": 42, "$type": "fontSizes", "unit": "px" },
+        "expanded": { "$value": 48, "$type": "fontSizes", "unit": "px" }
+      },
+      "titleLineHeight": {
+        "compact": { "$value": 38, "$type": "lineHeights", "unit": "px" },
+        "medium": { "$value": 46, "$type": "lineHeights", "unit": "px" },
+        "expanded": { "$value": 54, "$type": "lineHeights", "unit": "px" }
+      },
+      "subtitle": {
+        "compact": { "$value": 22, "$type": "fontSizes", "unit": "px" },
+        "medium": { "$value": 26, "$type": "fontSizes", "unit": "px" },
+        "expanded": { "$value": 30, "$type": "fontSizes", "unit": "px" }
+      },
+      "body": {
+        "compact": { "$value": 15, "$type": "fontSizes", "unit": "px" },
+        "medium": { "$value": 16, "$type": "fontSizes", "unit": "px" },
+        "expanded": { "$value": 17, "$type": "fontSizes", "unit": "px" }
+      },
+      "noteBadge": {
+        "compact": { "$value": 96, "$type": "fontSizes", "unit": "px" },
+        "medium": { "$value": 128, "$type": "fontSizes", "unit": "px" },
+        "expanded": { "$value": 160, "$type": "fontSizes", "unit": "px" }
+      }
+    }
+  },
+  "spacing": {
+    "half": { "$value": 2, "$type": "spacing", "unit": "px" },
+    "one": { "$value": 4, "$type": "spacing", "unit": "px" },
+    "two": { "$value": 8, "$type": "spacing", "unit": "px" },
+    "three": { "$value": 16, "$type": "spacing", "unit": "px" },
+    "four": { "$value": 24, "$type": "spacing", "unit": "px" },
+    "five": { "$value": 32, "$type": "spacing", "unit": "px" },
+    "six": { "$value": 64, "$type": "spacing", "unit": "px" }
+  },
+  "layout": {
+    "breakpoints": {
+      "compact": { "$value": 420, "$type": "sizing", "unit": "px" },
+      "medium": { "$value": 700, "$type": "sizing", "unit": "px" }
+    },
+    "touchTarget": {
+      "ios": { "$value": 44, "$type": "sizing", "unit": "px" },
+      "android": { "$value": 48, "$type": "sizing", "unit": "px" }
+    },
+    "maxContentWidth": { "$value": 800, "$type": "sizing", "unit": "px" },
+    "bottomTabInset": {
+      "ios": { "$value": 50, "$type": "sizing", "unit": "px" },
+      "android": { "$value": 80, "$type": "sizing", "unit": "px" }
+    }
+  },
+  "staff": {
+    "metrics": {
+      "lineSpacing": { "$value": 24, "$type": "spacing", "unit": "px" },
+      "lineWidth": { "$value": 1.5, "$type": "sizing", "unit": "px" },
+      "noteHeadRadiusX": { "$value": 13, "$type": "sizing", "unit": "px" },
+      "noteHeadRadiusY": { "$value": 9, "$type": "sizing", "unit": "px" },
+      "noteHeadRotation": { "$value": -0.3, "$type": "other" },
+      "stemHeight": { "$value": 67, "$type": "sizing", "unit": "px" },
+      "stemWidth": { "$value": 2.5, "$type": "sizing", "unit": "px" },
+      "ledgerLineExtend": { "$value": 20, "$type": "sizing", "unit": "px" },
+      "ledgerLineWidth": { "$value": 1.5, "$type": "sizing", "unit": "px" },
+      "hoverRadius": { "$value": 16, "$type": "sizing", "unit": "px" },
+      "canvasSize": { "$value": 340, "$type": "sizing", "unit": "px" }
+    },
+    "keyboard": {
+      "keyWidth": {
+        "compact": { "$value": 16, "$type": "sizing", "unit": "px" },
+        "medium": { "$value": 24, "$type": "sizing", "unit": "px" },
+        "expanded": { "$value": 28, "$type": "sizing", "unit": "px" }
+      }
+    }
+  }
+}
