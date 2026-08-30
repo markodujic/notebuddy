@@ -43,6 +43,14 @@
     "eslint-config-expo": "~56.0.4",
     "typescript": "~6.0.3"
   },
+  "expo": {
+    "install": {
+      "exclude": [
+        "react-native-reanimated",
+        "react-native-worklets"
+      ]
+    }
+  },
   "scripts": {
     "start": "expo start",
     "reset-project": "node ./scripts/reset-project.js",
