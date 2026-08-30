@@ -178,8 +178,8 @@ export const GrandStaffView = memo(function GrandStaffView({
   // Hilfslinien
   const ledgerYs = useMemo(() => {
     if (!notePosition) return [];
-    return getLedgerLineYs(notePosition, activeTopY, clef);
-  }, [notePosition, activeTopY, clef]);
+    return getLedgerLineYs(notePosition, activeTopY);
+  }, [notePosition, activeTopY]);
 
   // Middle line für Stem-Richtung
   const middleLineY = activeLineYs[2];

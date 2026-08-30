@@ -12,6 +12,8 @@
 
 import { create } from 'zustand';
 
+import { loadDarkMode, saveDarkMode } from '@/services/settings-storage';
+
 import {
     type Clef,
     type ExerciseMode,
@@ -39,10 +41,19 @@ export interface AppState {
   stabilityMs: number;
   onlyNaturalNotes: boolean;
   notationSystemId: NotationSystemId;
+  rangeFinderTimeLimit: number;
 
   // ── UI ──
   darkMode: boolean;
   settingsOpen: boolean;
+  /** AppState-Maschine 1:1 wie APP_STATES in der alten App (reduziert auf die UI-relevanten Zustände). */
+  appState: 'setup' | 'active' | 'end';
+  /** Anzeige im Audio-Modus (Note → Klavier): badge / staff / grand – wie audioDisplayMode im Original (Default: grand). */
+  audioDisplayMode: 'badge' | 'staff' | 'grand';
+  /** Antwort-Modus im Visualize-Modus: Sprache (🎤) oder Grafik (🎼) – wie ANSWER_INPUT_MODES im Original (Default: speech). */
+  answerInputMode: 'speech' | 'graphic';
+  /** RangeFinder: Zeigt den Start-Screen (Header zeigt dann den Zeit-Slider, 1:1 wie rangeFinderReady). */
+  rangeFinderReady: boolean;
 
   // ── Actions ──
   setMode: (mode: ExerciseMode) => void;
@@ -53,10 +64,15 @@ export interface AppState {
   setToleranceCents: (cents: number) => void;
   setStabilityMs: (ms: number) => void;
   setOnlyNaturalNotes: (value: boolean) => void;
+  setRangeFinderTimeLimit: (seconds: number) => void;
   setNotationSystemId: (id: NotationSystemId) => void;
   toggleDarkMode: () => void;
   setDarkMode: (value: boolean) => void;
   setSettingsOpen: (open: boolean) => void;
+  setAppState: (state: 'setup' | 'active' | 'end') => void;
+  setAudioDisplayMode: (mode: 'badge' | 'staff' | 'grand') => void;
+  setAnswerInputMode: (mode: 'speech' | 'graphic') => void;
+  setRangeFinderReady: (ready: boolean) => void;
 
   /** Gibt die effektive Range für den aktuellen Schlüssel zurück. */
   getEffectiveRange: () => Range;
@@ -73,8 +89,13 @@ export const useAppStore = create<AppState>((set, get) => ({
   stabilityMs: LEARNING_CONFIG.DEFAULT_STABILITY_MS,
   onlyNaturalNotes: true,
   notationSystemId: DEFAULT_NOTATION_ID,
+  rangeFinderTimeLimit: 4,
   darkMode: false,
   settingsOpen: false,
+  appState: 'setup',
+  audioDisplayMode: 'grand',
+  answerInputMode: 'speech',
+  rangeFinderReady: false,
 
   // ── Actions ──
   setMode: (mode) => set({ mode }),
@@ -85,13 +106,30 @@ export const useAppStore = create<AppState>((set, get) => ({
   setToleranceCents: (toleranceCents) => set({ toleranceCents }),
   setStabilityMs: (stabilityMs) => set({ stabilityMs }),
   setOnlyNaturalNotes: (onlyNaturalNotes) => set({ onlyNaturalNotes }),
+  setRangeFinderTimeLimit: (rangeFinderTimeLimit) => set({ rangeFinderTimeLimit }),
   setNotationSystemId: (notationSystemId) => set({ notationSystemId }),
   toggleDarkMode: () => set((s) => ({ darkMode: !s.darkMode })),
   setDarkMode: (darkMode) => set({ darkMode }),
   setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
+  setAppState: (appState) => set({ appState }),
+  setAudioDisplayMode: (audioDisplayMode) => set({ audioDisplayMode }),
+  setAnswerInputMode: (answerInputMode) => set({ answerInputMode }),
+  setRangeFinderReady: (rangeFinderReady) => set({ rangeFinderReady }),
 
   getEffectiveRange: () => {
     const { clef, trebleRange, bassRange } = get();
     return clef === 'treble' ? trebleRange : bassRange;
   },
 }));
+
+// ── Persistenz (1:1 wie localStorage der notenlern-app: nur darkMode) ──
+const persistedDarkMode = loadDarkMode();
+if (persistedDarkMode !== null) {
+  useAppStore.setState({ darkMode: persistedDarkMode });
+}
+
+useAppStore.subscribe((state, prev) => {
+  if (state.darkMode !== prev.darkMode) {
+    saveDarkMode(state.darkMode);
+  }
+});

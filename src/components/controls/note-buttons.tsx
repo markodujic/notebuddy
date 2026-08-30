@@ -12,7 +12,7 @@
  * Flow: User wählt Note (+ Vorzeichen via Swipe), dann Oktave → callback.
  */
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
     Pressable,
     StyleSheet,
@@ -53,16 +53,25 @@ export interface NoteButtonsProps {
   onBack?: () => void;
   /** Landscape-Modus (kompakter). */
   landscape?: boolean;
+  /** Ändert sich der Key, wird die Auswahl zurückgesetzt (1:1 wie `$: if (targetNote !== lastTargetNote)` im Original). */
+  resetKey?: number | string;
 }
 
 export function NoteButtons({
   onNoteSelect,
   onBack,
   landscape = false,
+  resetKey,
 }: NoteButtonsProps) {
   const [selectedNote, setSelectedNote] = useState("");
   const [selectedAccidental, setSelectedAccidental] = useState("");
   const [flashOctave, setFlashOctave] = useState(-1);
+
+  // 1:1 wie im Original: Bei neuer Aufgabe Auswahl zurücksetzen
+  useEffect(() => {
+    setSelectedNote("");
+    setSelectedAccidental("");
+  }, [resetKey]);
 
   const handleOctaveClick = useCallback(
     (octave: number) => {

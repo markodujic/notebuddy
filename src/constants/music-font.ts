@@ -54,8 +54,19 @@ export const STAFF_METRICS = {
   STEM_HEIGHT: 67,
   /** Notenhals-Breite. */
   STEM_WIDTH: 2.5,
+  /** Notenhals-Offset vom Notenzentrum (Original: ±12, nicht Radius 13). */
+  STEM_OFFSET_X: 12,
+  /** Violinschlüssel-Font-Größe (Original: 107px Bravura). */
+  CLEF_TREBLE_SIZE: 107,
+  /** Bassschlüssel-Font-Größe (Original: 88px Bravura). */
+  CLEF_BASS_SIZE: 88,
+  /** Schlüssel-X-Position (Original: LEFT_MARGIN 15 + 40). */
+  CLEF_X: 55,
   /** Hilfslinie über die Note hinaus. */
   LEDGER_LINE_EXTEND: 20,
+  /** Breite der Pergament-Freilegung unter Noten-Hilfslinien (Original: 4px auf ±22). */
+  LEDGER_CLEAR_WIDTH: 4,
+  LEDGER_CLEAR_EXTEND: 22,
   /** Alpha für Guide-Hilfslinien (Orientierungslinien). */
   GUIDE_LEDGER_ALPHA: 0.15,
   /** Dicke einer Hilfslinie (für Noten außerhalb des Systems). */

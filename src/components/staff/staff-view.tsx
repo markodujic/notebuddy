@@ -27,7 +27,7 @@ import {
   useFont,
 } from "@shopify/react-native-skia";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
-import { Pressable, StyleSheet, View, useColorScheme } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import {
   useSharedValue,
   withRepeat,
@@ -44,6 +44,7 @@ import {
   STAFF_METRICS,
 } from "@/constants/music-font";
 import { getNoteStaffPosition, type Clef, type StaffPosition } from "@/domain";
+import { useAppStore } from "@/stores/app-store";
 import {
   STAFF_HEIGHT,
   getLedgerLineYs,
@@ -193,9 +194,10 @@ function StaffCanvasInner({
   blinkOpacity,
   showGlow,
 }: StaffCanvasProps) {
-  const bravuraFont = useFont(BRAVURA_FONT_FAMILY, 96);
+  const bravuraTrebleFont = useFont(BRAVURA_FONT_FAMILY, STAFF_METRICS.CLEF_TREBLE_SIZE);
+  const bravuraBassFont = useFont(BRAVURA_FONT_FAMILY, STAFF_METRICS.CLEF_BASS_SIZE);
   const lineYs = useMemo(() => getStaffLineYs(topY), [topY]);
-  const clefX = 12 + 40; // LEFT_MARGIN + offset wie alte App
+  const clefX = STAFF_METRICS.CLEF_X; // LEFT_MARGIN + 40 (1:1 wie alte App)
   const noteX = width / 2;
 
   // Pergament-Textur generieren (gecached)
@@ -216,26 +218,24 @@ function StaffCanvasInner({
   // Hilfslinien für Display-Note
   const displayLedgers = useMemo(() => {
     if (!displayPosition) return [];
-    return getLedgerLineYs(displayPosition, topY, clef);
-  }, [displayPosition, topY, clef]);
+    return getLedgerLineYs(displayPosition, topY);
+  }, [displayPosition, topY]);
 
   // Hilfslinien für Wrong-Note
   const wrongLedgers = useMemo(() => {
     if (!wrongPosition) return [];
-    return getLedgerLineYs(wrongPosition, topY, clef);
-  }, [wrongPosition, topY, clef]);
+    return getLedgerLineYs(wrongPosition, topY);
+  }, [wrongPosition, topY]);
 
   // Hover-Hilfslinien
   const hoverLedgers = useMemo(() => {
     if (!hoverPosition) return [];
-    return getLedgerLineYs(hoverPosition, topY, clef);
-  }, [hoverPosition, topY, clef]);
+    return getLedgerLineYs(hoverPosition, topY);
+  }, [hoverPosition, topY]);
 
   const displayY = displayPosition ? getYForPosition(displayPosition, topY) : 0;
   const wrongY = wrongPosition ? getYForPosition(wrongPosition, topY) : 0;
   const hoverY = hoverPosition ? getYForPosition(hoverPosition, topY) : 0;
-
-  const clefGlyph = clef === "treble" ? SMUFL.TREBLE_CLEF : SMUFL.BASS_CLEF;
 
   // Middle line für Stem-Richtung
   const middleLineY = lineYs[2];
@@ -337,29 +337,42 @@ function StaffCanvasInner({
       ))}
 
       {/* ── Schlüssel ── */}
-      {bravuraFont && (
-        <Text
-          x={clefX}
-          y={
-            clef === "treble"
-              ? lineYs[3] // G-Linie (2. von unten = index 3)
-              : lineYs[1] // F-Linie (4. von unten = index 1)
-          }
-          text={clefGlyph}
-          font={bravuraFont}
-          color={parchmentColors.clef}
-        />
-      )}
+      {clef === "treble"
+        ? bravuraTrebleFont && (
+            <Text
+              x={clefX}
+              y={lineYs[3]} // G-Linie (2. von unten = index 3)
+              text={SMUFL.TREBLE_CLEF}
+              font={bravuraTrebleFont}
+              color={parchmentColors.clef}
+            />
+          )
+        : bravuraBassFont && (
+            <Text
+              x={clefX}
+              y={lineYs[1]} // F-Linie (4. von unten = index 1)
+              text={SMUFL.BASS_CLEF}
+              font={bravuraBassFont}
+              color={parchmentColors.clef}
+            />
+          )}
 
-      {/* ── Hilfslinien für Display-Note ── */}
+      {/* ── Hilfslinien für Display-Note (mit Pergament-Freilegung, 1:1) ── */}
       {displayLedgers.map((y, i) => (
-        <Line
-          key={`dl-${i}`}
-          p1={{ x: noteX - 20, y }}
-          p2={{ x: noteX + 20, y }}
-          color={parchmentColors.staffLine}
-          strokeWidth={STAFF_METRICS.LEDGER_LINE_WIDTH}
-        />
+        <Group key={`dl-${i}`}>
+          <Line
+            p1={{ x: noteX - STAFF_METRICS.LEDGER_CLEAR_EXTEND, y }}
+            p2={{ x: noteX + STAFF_METRICS.LEDGER_CLEAR_EXTEND, y }}
+            color={parchmentColors.bg}
+            strokeWidth={STAFF_METRICS.LEDGER_CLEAR_WIDTH}
+          />
+          <Line
+            p1={{ x: noteX - STAFF_METRICS.LEDGER_LINE_EXTEND, y }}
+            p2={{ x: noteX + STAFF_METRICS.LEDGER_LINE_EXTEND, y }}
+            color={parchmentColors.staffLine}
+            strokeWidth={STAFF_METRICS.LEDGER_LINE_WIDTH}
+          />
+        </Group>
       ))}
 
       {/* ── Falsche Note (blinkend, darkred) ── */}
@@ -369,8 +382,17 @@ function StaffCanvasInner({
           {wrongLedgers.map((y, i) => (
             <Line
               key={`wl-${i}`}
-              p1={{ x: noteX - 20, y }}
-              p2={{ x: noteX + 20, y }}
+              p1={{ x: noteX - STAFF_METRICS.LEDGER_CLEAR_EXTEND, y }}
+              p2={{ x: noteX + STAFF_METRICS.LEDGER_CLEAR_EXTEND, y }}
+              color={parchmentColors.bg}
+              strokeWidth={STAFF_METRICS.LEDGER_CLEAR_WIDTH}
+            />
+          ))}
+          {wrongLedgers.map((y, i) => (
+            <Line
+              key={`wlc-${i}`}
+              p1={{ x: noteX - STAFF_METRICS.LEDGER_LINE_EXTEND, y }}
+              p2={{ x: noteX + STAFF_METRICS.LEDGER_LINE_EXTEND, y }}
               color={parchmentColors.staffLine}
               strokeWidth={STAFF_METRICS.LEDGER_LINE_WIDTH}
             />
@@ -380,15 +402,15 @@ function StaffCanvasInner({
             p1={{
               x:
                 wrongY > middleLineY
-                  ? noteX + STAFF_METRICS.NOTE_HEAD_RADIUS_X
-                  : noteX - STAFF_METRICS.NOTE_HEAD_RADIUS_X,
+                  ? noteX + STAFF_METRICS.STEM_OFFSET_X
+                  : noteX - STAFF_METRICS.STEM_OFFSET_X,
               y: wrongY,
             }}
             p2={{
               x:
                 wrongY > middleLineY
-                  ? noteX + STAFF_METRICS.NOTE_HEAD_RADIUS_X
-                  : noteX - STAFF_METRICS.NOTE_HEAD_RADIUS_X,
+                  ? noteX + STAFF_METRICS.STEM_OFFSET_X
+                  : noteX - STAFF_METRICS.STEM_OFFSET_X,
               y:
                 wrongY > middleLineY
                   ? wrongY - STAFF_METRICS.STEM_HEIGHT
@@ -436,15 +458,15 @@ function StaffCanvasInner({
             p1={{
               x:
                 displayY > middleLineY
-                  ? noteX + STAFF_METRICS.NOTE_HEAD_RADIUS_X
-                  : noteX - STAFF_METRICS.NOTE_HEAD_RADIUS_X,
+                  ? noteX + STAFF_METRICS.STEM_OFFSET_X
+                  : noteX - STAFF_METRICS.STEM_OFFSET_X,
               y: displayY,
             }}
             p2={{
               x:
                 displayY > middleLineY
-                  ? noteX + STAFF_METRICS.NOTE_HEAD_RADIUS_X
-                  : noteX - STAFF_METRICS.NOTE_HEAD_RADIUS_X,
+                  ? noteX + STAFF_METRICS.STEM_OFFSET_X
+                  : noteX - STAFF_METRICS.STEM_OFFSET_X,
               y:
                 displayY > middleLineY
                   ? displayY - STAFF_METRICS.STEM_HEIGHT
@@ -517,8 +539,8 @@ export const StaffView = memo(function StaffView({
   onPositionSelect,
   width = STAFF_METRICS.CANVAS_SIZE,
 }: StaffViewProps) {
-  const scheme = useColorScheme();
-  const isDark = scheme === "dark";
+  const darkMode = useAppStore((s) => s.darkMode);
+  const isDark = darkMode; // Theme folgt dem App-Dark-Mode-Toggle (1:1 wie data-theme)
   const height = width; // Quadratisch wie alte App
   const topY = (height - STAFF_HEIGHT) / 2;
 
@@ -547,10 +569,13 @@ export const StaffView = memo(function StaffView({
     return getNoteStaffPosition(wrongMidi, clef);
   }, [wrongMidi, clef]);
 
-  const noteColor = displayColor ?? parchmentColors.noteHead;
-
-  // Glow anzeigen bei Feedback (wie alte App: showGlow nur bei correct)
-  const showGlow = !!showFeedback && !!displayPosition;
+  // 1:1 wie das Original:
+  //   - Aufdeckung nach falscher Antwort (showFeedback) → GRÜNE Note, kein Glow
+  //   - normale Anzeige → Note-Kopf-Farbe + grüner Glow
+  const noteColor = showFeedback
+    ? STAFF_FEEDBACK_COLORS.CORRECT
+    : (displayColor ?? parchmentColors.noteHead);
+  const showGlow = !!displayPosition && !showFeedback;
 
   // ── Fade-In Animation wenn showFeedback ──
   useEffect(() => {
@@ -581,23 +606,23 @@ export const StaffView = memo(function StaffView({
     }
   }, [wrongPosition, blinkOpacity]);
 
-  // ── Touch Handler ──
+  // ── Touch Handler (1:1: Klicks gesperrt während wrongPosition angezeigt wird) ──
   const handlePress = useCallback(
     (y: number) => {
-      if (!interactive || !onPositionSelect) return;
-      const pos = getPositionFromY(y, topY, clef);
+      if (!interactive || !onPositionSelect || wrongPosition) return;
+      const pos = getPositionFromY(y, topY);
       if (pos) onPositionSelect(pos);
     },
-    [interactive, onPositionSelect, clef, topY],
+    [interactive, onPositionSelect, topY, wrongPosition],
   );
 
   const handleMove = useCallback(
     (y: number) => {
       if (!interactive || displayPosition || wrongPosition) return;
-      const pos = getPositionFromY(y, topY, clef);
+      const pos = getPositionFromY(y, topY);
       setHoverPosition(pos);
     },
-    [interactive, displayPosition, wrongPosition, clef, topY],
+    [interactive, displayPosition, wrongPosition, topY],
   );
 
   const handleLeave = useCallback(() => {

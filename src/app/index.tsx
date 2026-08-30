@@ -1,180 +1,392 @@
-import { router } from "expo-router";
-import { StyleSheet, useWindowDimensions, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+/**
+ * Single-Page-Shell – 1:1 wie `App.svelte` der notenlern-app.
+ *
+ * Struktur:
+ *   main > container > header
+ *     - header-left: Titel „🎵 Notenlern-App" + Zurück-Button (wenn Session läuft)
+ *     - header-controls: ⚙️ Einstellungen + Dark-Mode-Toggle
+ *   SETUP: ModeSwitch-Karten (5 Modi)
+ *   Laufende Modi: eingebettete Modus-Screens (werden in Phase B–F
+ *   durch exakte 1:1-Ports der alten Modi ersetzt)
+ *   Settings als Modal-Overlay (Klick außerhalb schließt).
+ */
 
-import { ModeCard } from "@/components/mode-card";
-import { ThemedText } from "@/components/themed-text";
-import { ThemedView } from "@/components/themed-view";
-import { BottomTabInset, MaxContentWidth, Spacing } from "@/constants/theme";
+import { useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-const modes = [
-  {
-    title: "Noten erkennen",
-    description: "Note sehen, Ton spielen oder singen und direkt prüfen.",
-    icon: "♪",
-    accent: "#7c3aed",
-    href: "/note-to-piano" as const,
-  },
-  {
-    title: "Klavier → Note",
-    description: "Taste tippen, Notennamen wählen und bestätigen.",
-    icon: "🎹",
-    accent: "#22c55e",
-    href: "/piano-to-note" as const,
-  },
-  {
-    title: "Notensystem visualisieren",
-    description: "Positionen im System mental erfassen und sicher anwählen.",
-    icon: "🎼",
-    accent: "#0ea5e9",
-    href: "/visualize" as const,
-  },
-  {
-    title: "Tonumfang",
-    description: "Deinen sicheren Bereich testen und gezielt erweitern.",
-    icon: "⚡",
-    accent: "#f59e0b",
-    href: "/range-finder" as const,
-  },
-  {
-    title: "Erklärmodus",
-    description: "Mit einem geführten Tutorial die Klaviatur verstehen.",
-    icon: "📖",
-    accent: "#ec4899",
-    href: "/tutorial" as const,
-  },
-  {
-    title: "Klaviatur entdecken",
-    description: "Die gesamte Klaviatur erkunden und in Zoom-Stufen betrachten.",
-    icon: "🔎",
-    accent: "#14b8a6",
-    href: "/explore" as const,
-  },
-];
+import { ModeSwitch } from '@/components/mode-switch';
+import { NoteToPianoMode } from '@/components/modes/note-to-piano-mode';
+import { PianoToNoteMode } from '@/components/modes/piano-to-note-mode';
+import { RangeFinderMode } from '@/components/modes/range-finder-mode';
+import { VisualizeMode } from '@/components/modes/visualize-mode';
+import { SettingsPanel, SimpleSlider, type SettingsConfig } from '@/components/settings-panel';
+import { type ExerciseMode } from '@/domain';
+import { useTheme } from '@/hooks/use-theme';
+import { useAppStore } from '@/stores/app-store';
+import { useSessionStore } from '@/stores/session-store';
 
-export default function HomeScreen() {
-  const { width, height } = useWindowDimensions();
-  const isCompact = width < 420;
-  const isWide = width >= 700;
-  const titleSize = isCompact ? 34 : isWide ? 48 : 42;
-  const titleLineHeight = isCompact ? 38 : isWide ? 54 : 46;
+type ScreenId = 'setup' | ExerciseMode | 'range-finder';
+
+/** Tier-Emoji pro Zeitlimit (1:1 aus rangeFinderTimeLimitLabels). */
+const TIME_LIMIT_EMOJIS: Record<number, string> = {
+  1: '⚡', 2: '🐆', 3: '🦌', 4: '🐇', 5: '🦊',
+  6: '🐈', 7: '🐕', 8: '🦔', 9: '🐢', 10: '🐌',
+};
+
+export default function Home() {
+  const theme = useTheme();
+  const insets = useSafeAreaInsets();
+  const app = useAppStore();
+
+  const [screen, setScreen] = useState<ScreenId>('setup');
+  const [runId, setRunId] = useState(0);
+
+  // Session-Fortschritt für den Header (progress-compact 1:1)
+  const sessionCorrect = useSessionStore((s) => s.correctCount);
+  const sessionCompleted = useSessionStore((s) => s.correctCount + s.incorrectCount);
+
+  const startMode = (mode: ExerciseMode) => {
+    app.setMode(mode);
+    app.setAppState('active');
+    setScreen(mode);
+    setRunId((id) => id + 1);
+  };
+
+  const startRangeFinder = () => {
+    // wie im Original: RangeFinder nutzt intern den Visualize-Flow
+    app.setMode('range-finder');
+    app.setAppState('active');
+    setScreen('range-finder');
+    setRunId((id) => id + 1);
+  };
+
+  const backToSetup = () => {
+    app.setAppState('setup');
+    setScreen('setup');
+  };
+
+  const handleSettingsApply = (config: SettingsConfig) => {
+    app.setClef(config.clef);
+    app.setTrebleRange(config.trebleRange);
+    app.setBassRange(config.bassRange);
+    app.setExerciseCount(config.exerciseCount);
+    app.setOnlyNaturalNotes(config.onlyNaturalNotes);
+    app.setRangeFinderTimeLimit(config.rangeFinderTimeLimit);
+    app.setSettingsOpen(false);
+
+    // Wie im Original: laufende Session wird mit neuen Einstellungen neu gestartet
+    if (screen !== 'setup' && screen !== 'range-finder') {
+      setRunId((id) => id + 1);
+    }
+  };
+
+  const renderModeScreen = () => {
+    switch (screen) {
+      case 'note-to-piano':
+        return <NoteToPianoMode key={`ntp-${runId}`} onExit={backToSetup} />;
+      case 'piano-to-note':
+        return <PianoToNoteMode key={`ptn-${runId}`} onExit={backToSetup} />;
+      case 'visualize':
+        return <VisualizeMode key={`vis-${runId}`} onExit={backToSetup} />;
+      case 'range-finder':
+        return <RangeFinderMode key={`rf-${runId}`} onExit={backToSetup} />;
+      default:
+        return null;
+    }
+  };
 
   return (
-    <ThemedView style={styles.container}>
-      <SafeAreaView
-        style={[
-          styles.safeArea,
-          isCompact && styles.safeAreaCompact,
-          isWide && styles.safeAreaWide,
-        ]}
-      >
-        <View style={styles.glowOne} />
-        <View style={styles.glowTwo} />
+    <GestureHandlerRootView
+      style={[styles.container, { backgroundColor: theme.bgSurface, paddingTop: insets.top }]}
+    >
+      {/* ── Header ── */}
+      <View style={[styles.header, { backgroundColor: theme.bgHeader }]}>
+        <View style={styles.headerLeft}>
+          <Text style={[styles.h1, { color: theme.textOnHeader }]}>🎵 Notenlern-App</Text>
+          {screen !== 'setup' ? (
+            <Pressable onPress={backToSetup} hitSlop={8} style={styles.backBtnHeader}>
+              <Text style={[styles.backBtnText, { color: theme.headerBtnText }]}>← Zurück</Text>
+            </Pressable>
+          ) : null}
+          {/* progress-compact (1:1: „3/10 ✔ 2") */}
+          {screen !== 'setup' && app.appState === 'active' ? (
+            <View
+              style={[
+                styles.progressCompact,
+                { backgroundColor: theme.headerBtnBg, borderColor: theme.headerBtnBorder },
+              ]}
+            >
+              <Text style={[styles.progressCompactText, { color: theme.textOnHeader }]}>
+                {sessionCompleted}/{app.exerciseCount} ✔ {sessionCorrect}
+              </Text>
+            </View>
+          ) : null}
+          {/* Antwort-Toggles im Visualize-Modus (1:1: 🎤 Sprache / 🎼 Grafik) */}
+          {app.mode === 'visualize' && app.appState === 'active' ? (
+            <View style={styles.modeToggleHeader}>
+              {(['speech', 'graphic'] as const).map((m) => {
+                const active = app.answerInputMode === m;
+                return (
+                  <Pressable
+                    key={m}
+                    onPress={() => app.setAnswerInputMode(m)}
+                    style={[
+                      styles.toggleBtnHeader,
+                      {
+                        backgroundColor: active ? theme.headerBtnActiveBg : theme.headerBtnBg,
+                        borderColor: active ? theme.headerBtnActiveBg : theme.headerBtnBorder,
+                      },
+                    ]}
+                  >
+                    <Text style={styles.toggleEmoji}>{m === 'speech' ? '🎤' : '🎼'}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          ) : null}
+          {/* Anzeige-Toggles im Audio-Modus (1:1: 🔤 Notenname / 🎼 System / 🎹 Großes System) */}
+          {app.mode === 'note-to-piano' && app.appState === 'active' ? (
+            <View style={styles.modeToggleHeader}>
+              {(['badge', 'staff', 'grand'] as const).map((m) => {
+                const active = app.audioDisplayMode === m;
+                return (
+                  <Pressable
+                    key={m}
+                    onPress={() => app.setAudioDisplayMode(m)}
+                    style={[
+                      styles.toggleBtnHeader,
+                      {
+                        backgroundColor: active ? theme.headerBtnActiveBg : theme.headerBtnBg,
+                        borderColor: active ? theme.headerBtnActiveBg : theme.headerBtnBorder,
+                      },
+                    ]}
+                  >
+                    <Text style={styles.toggleEmoji}>
+                      {m === 'badge' ? '🔤' : m === 'staff' ? '🎼' : '🎹'}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          ) : null}
+        </View>
+        <View style={styles.headerControls}>
+          {/* RangeFinder-Zeit-Slider (1:1: nur auf dem Start-Screen sichtbar) */}
+          {app.rangeFinderReady ? (
+            <View
+              style={[
+                styles.headerTimeSlider,
+                { backgroundColor: theme.headerBtnBg, borderColor: theme.headerBtnBorder },
+              ]}
+            >
+              <Text style={styles.headerTimeEmoji}>
+                {TIME_LIMIT_EMOJIS[app.rangeFinderTimeLimit] ?? '🐇'}
+              </Text>
+              <View style={styles.headerSlider}>
+                <SimpleSlider
+                  min={1}
+                  max={10}
+                  value={app.rangeFinderTimeLimit}
+                  onChange={app.setRangeFinderTimeLimit}
+                />
+              </View>
+              <Text style={[styles.headerTimeValue, { color: theme.textOnHeader }]}>
+                {app.rangeFinderTimeLimit}s
+              </Text>
+            </View>
+          ) : null}
+          <Pressable
+            onPress={() => app.setSettingsOpen(true)}
+            style={[styles.headerBtn, { backgroundColor: theme.headerBtnBg, borderColor: theme.headerBtnBorder }]}
+          >
+            <Text style={[styles.headerBtnText, { color: theme.headerBtnText }]}>
+              ⚙️ Einstellungen
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={app.toggleDarkMode}
+            style={[styles.headerBtn, styles.iconBtn, { backgroundColor: theme.headerBtnBg, borderColor: theme.headerBtnBorder }]}
+          >
+            <Text style={styles.iconEmoji}>{app.darkMode ? '☀️' : '🌙'}</Text>
+          </Pressable>
+        </View>
+      </View>
 
-        <ThemedView
-          style={[
-            styles.heroSection,
-            isCompact && styles.heroCompact,
-            isWide && styles.heroWide,
-          ]}
-        />
+      {/* ── Inhalt ── */}
+      {screen === 'setup' ? (
+        <ScrollView contentContainerStyle={styles.setupScreen}>
+          <ModeSwitch
+            mode={app.mode}
+            clef={app.clef}
+            onChange={startMode}
+            onClefChange={app.setClef}
+            onRangeFinderStart={startRangeFinder}
+          />
+        </ScrollView>
+      ) : (
+        <View style={styles.exerciseScreen}>{renderModeScreen()}</View>
+      )}
 
-        <ThemedView style={[styles.grid, isWide && styles.gridWide]}>
-          {modes.map((mode) => (
-            <ModeCard
-              key={mode.title}
-              title={mode.title}
-              description={mode.description}
-              icon={mode.icon}
-              accent={mode.accent}
-              onPress={() => router.push(mode.href)}
-            />
-          ))}
-        </ThemedView>
-
-        <ThemedView
-          style={[styles.footerCard, isCompact && styles.footerCompact]}
+      {/* ── Settings-Modal ── */}
+      {app.settingsOpen ? (
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => app.setSettingsOpen(false)}
         >
-          <ThemedText type="defaultSemiBold">Bereit zum Loslegen?</ThemedText>
-          <ThemedText type="small" style={styles.footerText}>
-            Wähle einen Modus oben und starte direkt in die passende Übung.
-          </ThemedText>
-        </ThemedView>
-      </SafeAreaView>
-    </ThemedView>
+          <ScrollView
+            style={[styles.modalContent, { backgroundColor: theme.bgModal }]}
+            contentContainerStyle={styles.modalInner}
+            nestedScrollEnabled
+          >
+            <Pressable onPress={(e) => e.stopPropagation()}>
+              <SettingsPanel
+                isVisualizationMode={app.mode === 'visualize' && screen !== 'range-finder'}
+                exerciseCount={app.exerciseCount}
+                clef={app.clef}
+                onlyNaturalNotes={app.onlyNaturalNotes}
+                trebleRange={app.trebleRange}
+                bassRange={app.bassRange}
+                rangeFinderTimeLimit={app.rangeFinderTimeLimit}
+                onApply={handleSettingsApply}
+              />
+            </Pressable>
+          </ScrollView>
+        </Pressable>
+      ) : null}
+    </GestureHandlerRootView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: "center",
   },
-  safeArea: {
-    flex: 1,
-    paddingHorizontal: Spacing.four,
-    alignItems: "stretch",
-    gap: Spacing.three,
-    paddingBottom: BottomTabInset + Spacing.three,
-    maxWidth: MaxContentWidth,
-    width: "100%",
-    alignSelf: "center",
+
+  // Header
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
   },
-  safeAreaCompact: {
-    paddingHorizontal: Spacing.three,
-    paddingBottom: BottomTabInset + Spacing.two,
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flexShrink: 1,
   },
-  safeAreaWide: {
-    paddingHorizontal: Spacing.five,
+  h1: {
+    fontSize: 20,
+    fontWeight: 'bold',
   },
-  heroSection: {
-    paddingTop: Spacing.five,
-    paddingBottom: Spacing.two,
-    gap: Spacing.three,
+  backBtnHeader: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 6,
   },
-  heroCompact: {
-    paddingTop: Spacing.three,
-    gap: Spacing.two,
+  backBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
-  heroWide: {
-    paddingTop: Spacing.six,
+  progressCompact: {
+    borderWidth: 1,
+    borderRadius: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
   },
-  grid: {
-    gap: Spacing.three,
-    marginTop: Spacing.two,
+  progressCompactText: {
+    fontSize: 13,
+    fontWeight: '600',
   },
-  gridWide: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-  },
-  footerCard: {
-    marginTop: Spacing.two,
-    padding: Spacing.four,
-    borderRadius: Spacing.four,
+  modeToggleHeader: {
+    flexDirection: 'row',
     gap: 6,
   },
-  footerCompact: {
-    padding: Spacing.three,
+  toggleBtnHeader: {
+    width: 34,
+    height: 34,
+    borderWidth: 1,
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  footerText: {
-    opacity: 0.72,
+  toggleEmoji: {
+    fontSize: 16,
   },
-  glowOne: {
-    position: "absolute",
-    top: -100,
-    right: -60,
-    width: 220,
-    height: 220,
-    borderRadius: 220,
-    backgroundColor: "rgba(124, 58, 237, 0.18)",
+  headerTimeSlider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderRadius: 6,
+    paddingLeft: 8,
+    paddingRight: 10,
+    paddingVertical: 2,
   },
-  glowTwo: {
-    position: "absolute",
-    top: 220,
-    left: -80,
-    width: 180,
-    height: 180,
-    borderRadius: 180,
-    backgroundColor: "rgba(14, 165, 233, 0.12)",
+  headerTimeEmoji: {
+    fontSize: 16,
+  },
+  headerSlider: {
+    width: 80,
+  },
+  headerTimeValue: {
+    fontSize: 13,
+    fontWeight: '600',
+    minWidth: 24,
+    textAlign: 'center',
+  },
+  headerControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  headerBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderRadius: 6,
+  },
+  iconBtn: {
+    paddingHorizontal: 10,
+  },
+  headerBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  iconEmoji: {
+    fontSize: 16,
+  },
+
+  // Content
+  setupScreen: {
+    flexGrow: 1,
+    justifyContent: 'center',
+  },
+  exerciseScreen: {
+    flex: 1,
+  },
+
+  // Settings-Modal
+  modalOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 100,
+  },
+  modalContent: {
+    width: '92%',
+    maxHeight: '85%',
+    borderRadius: 12,
+  },
+  modalInner: {
+    padding: 20,
   },
 });

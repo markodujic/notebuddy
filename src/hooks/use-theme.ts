@@ -1,14 +1,12 @@
 /**
- * Learn more about light and dark modes:
- * https://docs.expo.dev/guides/color-schemes/
+ * Theme-Hook – nutzt den Dark-Mode aus dem App-Store (Header-Toggle),
+ * exakt wie `toggleDarkMode()` in der alten notenlern-app.
  */
 
 import { Colors } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useAppStore } from '@/stores/app-store';
 
 export function useTheme() {
-  const scheme = useColorScheme();
-  const theme = scheme === 'unspecified' ? 'light' : scheme;
-
-  return Colors[theme];
+  const darkMode = useAppStore((s) => s.darkMode);
+  return darkMode ? Colors.dark : Colors.light;
 }

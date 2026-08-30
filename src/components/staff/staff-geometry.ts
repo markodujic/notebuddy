@@ -6,13 +6,7 @@
  */
 
 import { STAFF_METRICS } from '@/constants/music-font';
-import {
-  type Clef,
-  type StaffPosition,
-  getNoteStaffPosition,
-  getValidVisualizationNotes,
-  parseStaffPosition,
-} from '@/domain';
+import { type StaffPosition, parseStaffPosition } from '@/domain';
 
 /** Höhe des Hauptsystems (5 Linien, 4 Abstände). */
 export const STAFF_HEIGHT = 4 * STAFF_METRICS.LINE_SPACING;
@@ -85,26 +79,53 @@ export function getYForPosition(position: StaffPosition, topY: number): number {
 
 /**
  * Wandelt eine Y-Koordinate in die nächste StaffPosition um.
- *
+ * 1:1 wie getPositionFromY im Original: Alle 29 Positionen sind klickbar,
+ * unabhängig vom Notenschlüssel. Toleranz = LINE_SPACING / 2.5.
+ */
+
+/** Alle 29 Positionen von oben (ledger-above-5) nach unten (ledger-below-5). */
+const ALL_POSITIONS: StaffPosition[] = [
+  'ledger-above-5',
+  'ledger-above-space-5',
+  'ledger-above-4',
+  'ledger-above-space-4',
+  'ledger-above-3',
+  'ledger-above-space-3',
+  'ledger-above-2',
+  'ledger-above-space-2',
+  'ledger-above-1',
+  'ledger-above-space-1',
+  'line-5',
+  'space-4',
+  'line-4',
+  'space-3',
+  'line-3',
+  'space-2',
+  'line-2',
+  'space-1',
+  'line-1',
+  'ledger-below-space-1',
+  'ledger-below-1',
+  'ledger-below-space-2',
+  'ledger-below-2',
+  'ledger-below-space-3',
+  'ledger-below-3',
+  'ledger-below-space-4',
+  'ledger-below-4',
+  'ledger-below-space-5',
+  'ledger-below-5',
+];
+
+/**
  * @param y Y-Koordinate.
  * @param topY Y-Koordinate der obersten Linie (Line 5).
- * @param clef Notenschlüssel (für gültige Positionen).
  * @returns Position oder null.
  */
-export function getPositionFromY(
-  y: number,
-  topY: number,
-  clef: Clef,
-): StaffPosition | null {
-  const validNotes = getValidVisualizationNotes(clef);
-
-  // Finde die nächste Position zur Y-Koordinate
+export function getPositionFromY(y: number, topY: number): StaffPosition | null {
   let bestPosition: StaffPosition | null = null;
   let bestDistance = Infinity;
 
-  for (const midi of validNotes) {
-    const pos = getNoteStaffPosition(midi, clef) as StaffPosition | null;
-    if (!pos) continue;
+  for (const pos of ALL_POSITIONS) {
     const posY = getYForPosition(pos, topY);
     const distance = Math.abs(y - posY);
     if (distance < bestDistance) {
@@ -136,35 +157,28 @@ export function getStaffLineYs(topY: number): number[] {
 
 /**
  * Berechnet, welche Hilfslinien für eine Note gezeichnet werden müssen.
+ * 1:1 wie das Original: LINE-Positionen (ledger-above-N) → N Linien,
+ * SPACE-Positionen (ledger-above-space-N) → N−1 Linien.
  *
  * @param position Die anzuzeigende Position.
  * @param topY Y-Koordinate der obersten Linie.
- * @param clef Schlüssel.
  * @returns Array von Y-Koordinaten für Hilfslinien.
  */
-export function getLedgerLineYs(
-  position: StaffPosition,
-  topY: number,
-  clef: Clef,
-): number[] {
+export function getLedgerLineYs(position: StaffPosition, topY: number): number[] {
   const info = parseStaffPosition(position);
-  if (!info.isLedger || info.type !== 'ledger') return [];
+  if (!info.isLedger) return [];
+
+  // Linien-Position: N Linien; Space-Position: N−1 Linien (Original-Logik)
+  const numLedgerLines = info.type === 'ledger' ? info.number : info.number - 1;
+  if (numLedgerLines <= 0) return [];
 
   const result: number[] = [];
-  if (info.direction === 'below') {
-    // Alle Hilfslinien unterhalb von 1 bis zur aktuellen
-    for (let n = 1; n <= info.number; n += 1) {
-      const ledgerPos = `ledger-below-${n}` as StaffPosition;
-      result.push(getYForPosition(ledgerPos, topY));
-    }
-  } else if (info.direction === 'above') {
-    // Alle Hilfslinien oberhalb von 1 bis zur aktuellen
-    for (let n = 1; n <= info.number; n += 1) {
-      const ledgerPos = `ledger-above-${n}` as StaffPosition;
-      result.push(getYForPosition(ledgerPos, topY));
-    }
+  for (let n = 1; n <= numLedgerLines; n += 1) {
+    const ledgerPos =
+      info.direction === 'above'
+        ? (`ledger-above-${n}` as StaffPosition)
+        : (`ledger-below-${n}` as StaffPosition);
+    result.push(getYForPosition(ledgerPos, topY));
   }
-
-  void clef;
   return result;
 }
