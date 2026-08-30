@@ -12,7 +12,14 @@
  */
 
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -39,6 +46,11 @@ export default function Home() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const app = useAppStore();
+  const { width, height } = useWindowDimensions();
+
+  // Kompakter Header wie im Original (@media landscape/narrow):
+  // Titel ausblenden, Settings icon-only, kompakte Paddings.
+  const compactHeader = width < 700 || height < 450;
 
   const [screen, setScreen] = useState<ScreenId>('setup');
   const [runId, setRunId] = useState(0);
@@ -102,12 +114,29 @@ export default function Home() {
       style={[styles.container, { backgroundColor: theme.bgSurface, paddingTop: insets.top }]}
     >
       {/* ── Header ── */}
-      <View style={[styles.header, { backgroundColor: theme.bgHeader }]}>
-        <View style={styles.headerLeft}>
-          <Text style={[styles.h1, { color: theme.textOnHeader }]}>🎵 Notenlern-App</Text>
+      <View
+        style={[
+          styles.header,
+          compactHeader && styles.headerCompact,
+          { backgroundColor: theme.bgHeader },
+        ]}
+      >
+        <View style={[styles.headerLeft, compactHeader && styles.headerLeftCompact]}>
+          {!compactHeader ? (
+            <Text style={[styles.h1, { color: theme.textOnHeader }]}>🎵 Notenlern-App</Text>
+          ) : null}
           {screen !== 'setup' ? (
-            <Pressable onPress={backToSetup} hitSlop={8} style={styles.backBtnHeader}>
-              <Text style={[styles.backBtnText, { color: theme.headerBtnText }]}>← Zurück</Text>
+            <Pressable
+              onPress={backToSetup}
+              hitSlop={8}
+              style={[styles.backBtnHeader, compactHeader && styles.backBtnCompact]}
+            >
+              <Text
+                numberOfLines={1}
+                style={[styles.backBtnText, compactHeader && styles.textCompact, { color: theme.headerBtnText }]}
+              >
+                ← Zurück
+              </Text>
             </Pressable>
           ) : null}
           {/* progress-compact (1:1: „3/10 ✔ 2") */}
@@ -115,10 +144,14 @@ export default function Home() {
             <View
               style={[
                 styles.progressCompact,
+                compactHeader && styles.progressCompactSm,
                 { backgroundColor: theme.headerBtnBg, borderColor: theme.headerBtnBorder },
               ]}
             >
-              <Text style={[styles.progressCompactText, { color: theme.textOnHeader }]}>
+              <Text
+                numberOfLines={1}
+                style={[styles.progressCompactText, compactHeader && styles.textSmallCompact, { color: theme.textOnHeader }]}
+              >
                 {sessionCompleted}/{app.exerciseCount} ✔ {sessionCorrect}
               </Text>
             </View>
@@ -134,6 +167,7 @@ export default function Home() {
                     onPress={() => app.setAnswerInputMode(m)}
                     style={[
                       styles.toggleBtnHeader,
+                      compactHeader && styles.toggleBtnCompact,
                       {
                         backgroundColor: active ? theme.headerBtnActiveBg : theme.headerBtnBg,
                         borderColor: active ? theme.headerBtnActiveBg : theme.headerBtnBorder,
@@ -157,6 +191,7 @@ export default function Home() {
                     onPress={() => app.setAudioDisplayMode(m)}
                     style={[
                       styles.toggleBtnHeader,
+                      compactHeader && styles.toggleBtnCompact,
                       {
                         backgroundColor: active ? theme.headerBtnActiveBg : theme.headerBtnBg,
                         borderColor: active ? theme.headerBtnActiveBg : theme.headerBtnBorder,
@@ -172,7 +207,7 @@ export default function Home() {
             </View>
           ) : null}
         </View>
-        <View style={styles.headerControls}>
+        <View style={[styles.headerControls, compactHeader && styles.headerControlsCompact]}>
           {/* RangeFinder-Zeit-Slider (1:1: nur auf dem Start-Screen sichtbar) */}
           {app.rangeFinderReady ? (
             <View
@@ -199,15 +234,26 @@ export default function Home() {
           ) : null}
           <Pressable
             onPress={() => app.setSettingsOpen(true)}
-            style={[styles.headerBtn, { backgroundColor: theme.headerBtnBg, borderColor: theme.headerBtnBorder }]}
+            style={[
+              styles.headerBtn,
+              compactHeader && styles.headerBtnCompact,
+              { backgroundColor: theme.headerBtnBg, borderColor: theme.headerBtnBorder },
+            ]}
           >
-            <Text style={[styles.headerBtnText, { color: theme.headerBtnText }]}>
-              ⚙️ Einstellungen
+            <Text
+              style={[styles.headerBtnText, compactHeader && styles.textCompact, { color: theme.headerBtnText }]}
+            >
+              ⚙️{compactHeader ? '' : ' Einstellungen'}
             </Text>
           </Pressable>
           <Pressable
             onPress={app.toggleDarkMode}
-            style={[styles.headerBtn, styles.iconBtn, { backgroundColor: theme.headerBtnBg, borderColor: theme.headerBtnBorder }]}
+            style={[
+              styles.headerBtn,
+              styles.iconBtn,
+              compactHeader && styles.iconBtnCompact,
+              { backgroundColor: theme.headerBtnBg, borderColor: theme.headerBtnBorder },
+            ]}
           >
             <Text style={styles.iconEmoji}>{app.darkMode ? '☀️' : '🌙'}</Text>
           </Pressable>
@@ -272,11 +318,22 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 16,
   },
+  headerCompact: {
+    // 1:1 Original: header { padding: 4px 8px; flex-wrap: nowrap; gap: 2px; }
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
     flexShrink: 1,
+  },
+  headerLeftCompact: {
+    // 1:1 Original: .header-left { gap: 3px; min-width: 0; flex-shrink: 1; overflow: hidden; }
+    gap: 3,
+    minWidth: 0,
+    overflow: 'hidden',
   },
   h1: {
     fontSize: 20,
@@ -287,6 +344,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderRadius: 6,
   },
+  backBtnCompact: {
+    // 1:1 Original: .btn-back-header { padding: 3px 6px; }
+    paddingVertical: 3,
+    paddingHorizontal: 6,
+  },
   backBtnText: {
     fontSize: 14,
     fontWeight: '600',
@@ -296,6 +358,11 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     paddingVertical: 6,
     paddingHorizontal: 10,
+  },
+  progressCompactSm: {
+    // 1:1 Original: .progress-compact { padding: 3px 6px; font-size: 10px; white-space: nowrap; }
+    paddingVertical: 3,
+    paddingHorizontal: 6,
   },
   progressCompactText: {
     fontSize: 13,
@@ -312,6 +379,11 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  toggleBtnCompact: {
+    // 1:1 Original: .toggle-btn-header { font-size: 14px; padding: 3px 5px; }
+    width: 26,
+    height: 26,
   },
   toggleEmoji: {
     fontSize: 16,
@@ -343,18 +415,40 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
+  headerControlsCompact: {
+    // 1:1 Original: .header-controls { gap: 3px; flex-shrink: 0; }
+    gap: 3,
+    flexShrink: 0,
+  },
   headerBtn: {
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderWidth: 1,
     borderRadius: 6,
   },
+  headerBtnCompact: {
+    // 1:1 Original: .settings-btn { padding: 3px 6px; font-size: 14px; }
+    paddingVertical: 3,
+    paddingHorizontal: 6,
+  },
   iconBtn: {
     paddingHorizontal: 10,
+  },
+  iconBtnCompact: {
+    // 1:1 Original: .dark-mode-toggle { padding: 3px 5px; font-size: 14px; }
+    paddingHorizontal: 5,
   },
   headerBtnText: {
     fontSize: 13,
     fontWeight: '600',
+  },
+  textCompact: {
+    // 1:1 Original-Buttons im Landscape: font-size: 11px
+    fontSize: 11,
+  },
+  textSmallCompact: {
+    // 1:1 Original: .progress-compact { font-size: 10px; }
+    fontSize: 10,
   },
   iconEmoji: {
     fontSize: 16,
