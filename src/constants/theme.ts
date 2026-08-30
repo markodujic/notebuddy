@@ -55,5 +55,10 @@ export const Spacing = {
   six: 64,
 } as const;
 
-export const BottomTabInset = Platform.select({ ios: 50, android: 80 }) ?? 0;
+/**
+ * Reserve für die (entfernte) Tab-Bar. Die App nutzt seit dem Umbau auf ein
+ * reines Stack-Layout keine Tab-Bar mehr — alle Screens laufen über Home-Karten.
+ * Der Wert bleibt als Slot erhalten, falls später wieder eine Bar ergänzt wird.
+ */
+export const BottomTabInset = 0;
 export const MaxContentWidth = 800;

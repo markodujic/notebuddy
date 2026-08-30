@@ -43,6 +43,13 @@ const modes = [
     accent: "#ec4899",
     href: "/tutorial" as const,
   },
+  {
+    title: "Klaviatur entdecken",
+    description: "Die gesamte Klaviatur erkunden und in Zoom-Stufen betrachten.",
+    icon: "🔎",
+    accent: "#14b8a6",
+    href: "/explore" as const,
+  },
 ];
 
 export default function HomeScreen() {

@@ -18,7 +18,7 @@ Ear-training / note-learning app built with **Expo SDK 56** (React Native 0.85),
 - **Audio:** `react-native-audio-api` (recording + autocorrelation pitch detection), `expo-speech-recognition`
 - **Graphics/Animation:** `@shopify/react-native-skia`, `react-native-reanimated` 4, `react-native-worklets`, `react-native-svg`, `vexflow`
 - **State:** `zustand` · **Persistenz:** `expo-sqlite`
-- **Routing:** `expo-router` (NativeTabs)
+- **Routing:** `expo-router` (Stack-Layout, Navigation über Home-Karten)
 
 ## Setup
 
