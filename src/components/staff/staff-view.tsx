@@ -19,12 +19,11 @@ import {
   Canvas,
   Group,
   Line,
-  Path,
   Rect,
   RoundedRect,
-  Skia,
   Text,
   useFont,
+  type SkFont,
 } from "@shopify/react-native-skia";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
@@ -89,28 +88,15 @@ type StaffCanvasProps = {
   showGlow: boolean;
 };
 
-// ── Helpers: Oval Path (Skia hat keine Ellipse Komponente) ─────────────────
+// ── Helpers: Bravura-Glyph-Messung ──────────────────────────────────────────
 
-/** Erstellt einen Skia-Pfad für ein Oval (wie ctx.ellipse). */
-function makeOvalPath(
-  cx: number,
-  cy: number,
-  rx: number,
-  ry: number,
-): React.ComponentProps<typeof Path>["path"] {
-  const path = Skia.Path.Make();
-  path.addOval(Skia.XYWHRect(cx - rx, cy - ry, rx * 2, ry * 2));
-  return path;
-}
-
-/** Erstellt einen Oval-Umriss-Pfad (für Hover, etwas kleiner). */
-function makeOvalStrokePath(
-  cx: number,
-  cy: number,
-  rx: number,
-  ry: number,
-): React.ComponentProps<typeof Path>["path"] {
-  return makeOvalPath(cx, cy, rx, ry);
+/**
+ * Halbe Breite eines Bravura-Glyphs (für zentriertes Zeichnen).
+ * SMuFL: Notenkopf-Origin liegt links, vertikal zentriert auf der Baseline.
+ */
+function glyphHalfWidth(font: SkFont, text: string): number {
+  const m = font.measureText(text) as number | { width: number };
+  return (typeof m === "number" ? m : m.width) / 2;
 }
 
 // ── Parchment Texture (cached) ────────────────────────────────────────────
@@ -196,6 +182,8 @@ function StaffCanvasInner({
 }: StaffCanvasProps) {
   const bravuraTrebleFont = useFont(BRAVURA_FONT_FAMILY, STAFF_METRICS.CLEF_TREBLE_SIZE);
   const bravuraBassFont = useFont(BRAVURA_FONT_FAMILY, STAFF_METRICS.CLEF_BASS_SIZE);
+  // Notenkopf-Glyph: 1 em = 4 Staff-Spaces (SMuFL) → Kopf ist 1 Space hoch
+  const noteFont = useFont(BRAVURA_FONT_FAMILY, STAFF_METRICS.NOTE_GLYPH_FONT_SIZE);
   const lineYs = useMemo(() => getStaffLineYs(topY), [topY]);
   const clefX = STAFF_METRICS.CLEF_X; // LEFT_MARGIN + 40 (1:1 wie alte App)
   const noteX = width / 2;
@@ -240,37 +228,11 @@ function StaffCanvasInner({
   // Middle line für Stem-Richtung
   const middleLineY = lineYs[2];
 
-  // Oval-Pfade memoisieren (Skia hat keine Ellipse Komponente)
-  const displayNotePath = useMemo(
-    () =>
-      makeOvalPath(
-        noteX,
-        displayY,
-        STAFF_METRICS.NOTE_HEAD_RADIUS_X,
-        STAFF_METRICS.NOTE_HEAD_RADIUS_Y,
-      ),
-    [noteX, displayY],
-  );
-  const wrongNotePath = useMemo(
-    () =>
-      makeOvalPath(
-        noteX,
-        wrongY,
-        STAFF_METRICS.NOTE_HEAD_RADIUS_X,
-        STAFF_METRICS.NOTE_HEAD_RADIUS_Y,
-      ),
-    [noteX, wrongY],
-  );
-  const hoverNotePath = useMemo(
-    () =>
-      makeOvalStrokePath(
-        noteX,
-        hoverY,
-        STAFF_METRICS.NOTE_HEAD_RADIUS_X - 2,
-        STAFF_METRICS.NOTE_HEAD_RADIUS_Y - 1,
-      ),
-    [noteX, hoverY],
-  );
+  // Notenkopf-Halbbreite (gemessen) – Hals sitzt exakt an der Glyph-Kante
+  const headHalfW = noteFont
+    ? glyphHalfWidth(noteFont, SMUFL.NOTE_HEAD_FILLED)
+    : (STAFF_METRICS.NOTE_HEAD_WIDTH_SPACES * STAFF_METRICS.LINE_SPACING) / 2;
+  const stemOffsetX = headHalfW;
 
   return (
     <Canvas style={{ width, height }}>
@@ -402,15 +364,15 @@ function StaffCanvasInner({
             p1={{
               x:
                 wrongY > middleLineY
-                  ? noteX + STAFF_METRICS.STEM_OFFSET_X
-                  : noteX - STAFF_METRICS.STEM_OFFSET_X,
+                  ? noteX + stemOffsetX
+                  : noteX - stemOffsetX,
               y: wrongY,
             }}
             p2={{
               x:
                 wrongY > middleLineY
-                  ? noteX + STAFF_METRICS.STEM_OFFSET_X
-                  : noteX - STAFF_METRICS.STEM_OFFSET_X,
+                  ? noteX + stemOffsetX
+                  : noteX - stemOffsetX,
               y:
                 wrongY > middleLineY
                   ? wrongY - STAFF_METRICS.STEM_HEIGHT
@@ -420,53 +382,51 @@ function StaffCanvasInner({
             strokeWidth={STAFF_METRICS.STEM_WIDTH}
             opacity={blinkOpacity}
           />
-          {/* Notenkopf als Oval (rotiert) */}
-          <Group
-            transform={[{ rotate: STAFF_METRICS.NOTE_HEAD_ROTATION }]}
-            origin={{ x: noteX, y: wrongY }}
-            opacity={blinkOpacity}
-          >
-            <Path
-              path={wrongNotePath}
+          {/* Notenkopf als Bravura-Glyph (SMuFL, typografisch korrekt) */}
+          {noteFont && (
+            <Text
+              x={noteX - headHalfW}
+              y={wrongY}
+              text={SMUFL.NOTE_HEAD_FILLED}
+              font={noteFont}
               color={STAFF_FEEDBACK_COLORS.WRONG_BLINK}
+              opacity={blinkOpacity}
             />
-          </Group>
+          )}
         </>
       )}
 
       {/* ── Display-Note ── */}
       {displayPosition && (
         <>
-          {/* Glow-Effekt für korrekte Antworten (grüner Ring) */}
-          {showGlow && (
-            <Group
-              transform={[{ rotate: STAFF_METRICS.NOTE_HEAD_ROTATION }]}
-              origin={{ x: noteX, y: displayY }}
+          {/* Glow-Effekt für korrekte Antworten (grüner Ring um Glyph) */}
+          {showGlow && noteFont && (
+            <Text
+              x={noteX - headHalfW}
+              y={displayY}
+              text={SMUFL.NOTE_HEAD_FILLED}
+              font={noteFont}
+              color={STAFF_FEEDBACK_COLORS.CORRECT_GLOW}
+              style="stroke"
+              strokeWidth={8}
+              strokeJoin="round"
               opacity={fadeOpacity}
-            >
-              <Path
-                path={displayNotePath}
-                color={STAFF_FEEDBACK_COLORS.CORRECT_GLOW}
-                style="stroke"
-                strokeWidth={8}
-                strokeJoin="round"
-              />
-            </Group>
+            />
           )}
           {/* Stem */}
           <Line
             p1={{
               x:
                 displayY > middleLineY
-                  ? noteX + STAFF_METRICS.STEM_OFFSET_X
-                  : noteX - STAFF_METRICS.STEM_OFFSET_X,
+                  ? noteX + stemOffsetX
+                  : noteX - stemOffsetX,
               y: displayY,
             }}
             p2={{
               x:
                 displayY > middleLineY
-                  ? noteX + STAFF_METRICS.STEM_OFFSET_X
-                  : noteX - STAFF_METRICS.STEM_OFFSET_X,
+                  ? noteX + stemOffsetX
+                  : noteX - stemOffsetX,
               y:
                 displayY > middleLineY
                   ? displayY - STAFF_METRICS.STEM_HEIGHT
@@ -476,14 +436,17 @@ function StaffCanvasInner({
             strokeWidth={STAFF_METRICS.STEM_WIDTH}
             opacity={fadeOpacity}
           />
-          {/* Notenkopf als Oval (rotiert) */}
-          <Group
-            transform={[{ rotate: STAFF_METRICS.NOTE_HEAD_ROTATION }]}
-            origin={{ x: noteX, y: displayY }}
-            opacity={fadeOpacity}
-          >
-            <Path path={displayNotePath} color={displayColor} />
-          </Group>
+          {/* Notenkopf als Bravura-Glyph (SMuFL, typografisch korrekt) */}
+          {noteFont && (
+            <Text
+              x={noteX - headHalfW}
+              y={displayY}
+              text={SMUFL.NOTE_HEAD_FILLED}
+              font={noteFont}
+              color={displayColor}
+              opacity={fadeOpacity}
+            />
+          )}
         </>
       )}
 
@@ -509,18 +472,18 @@ function StaffCanvasInner({
             r={STAFF_METRICS.HOVER_RADIUS}
             color={STAFF_FEEDBACK_COLORS.HOVER_FILL}
           />
-          {/* Notenkopf-Umriss */}
-          <Group
-            transform={[{ rotate: STAFF_METRICS.NOTE_HEAD_ROTATION }]}
-            origin={{ x: noteX, y: hoverY }}
-          >
-            <Path
-              path={hoverNotePath}
+          {/* Notenkopf-Umriss als Glyph */}
+          {noteFont && (
+            <Text
+              x={noteX - headHalfW}
+              y={hoverY}
+              text={SMUFL.NOTE_HEAD_FILLED}
+              font={noteFont}
               color={STAFF_FEEDBACK_COLORS.HOVER_STROKE}
               style="stroke"
               strokeWidth={2}
             />
-          </Group>
+          )}
         </>
       )}
     </Canvas>

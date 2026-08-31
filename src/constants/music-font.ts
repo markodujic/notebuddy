@@ -50,6 +50,9 @@ export const STAFF_METRICS = {
   NOTE_HEAD_RADIUS_Y: 9,
   /** Notenkopf-Rotation (leicht schräg, wie echte Notation). */
   NOTE_HEAD_ROTATION: -0.3,
+  NOTE_HEAD_WIDTH_SPACES: 1.3, // Bravura-Notenkopf ≈ 1.3 Staff-Spaces breit
+  /** Font-Größe für Notenkopf-Glyphs: 4 Staff-Spaces (SMuFL-Standard: 1 em = 1 staff). */
+  NOTE_GLYPH_FONT_SIZE: 96, // LINE_SPACING (24) × 4
   /** Notenhals-Länge (px). */
   STEM_HEIGHT: 67,
   /** Notenhals-Breite. */
