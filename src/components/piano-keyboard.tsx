@@ -7,9 +7,11 @@ import {
   useWindowDimensions,
 } from "react-native";
 import Animated, {
+  cancelAnimation,
   Easing,
   useAnimatedStyle,
   useSharedValue,
+  withRepeat,
   withTiming,
 } from "react-native-reanimated";
 
@@ -107,13 +109,14 @@ function resolveKeyFill(
   if (state === "correct") return isBlackKey ? "#16a34a" : "#22c55e";
   if (state === "wrong") return isBlackKey ? "#dc2626" : "#ef4444";
   if (state === "current") return isBlackKey ? "#eab308" : "#facc15";
+  if (state === "focused") return isBlackKey ? "#7c3aed" : "#a78bfa";
 
   // Keys outside the focus range are greyed out
   if (dimmed) return isBlackKey ? "#4a4a55" : "#c8c8cc";
 
-  // Range highlight: subtle violet tint to show the active range
-  if (inRange && !isBlackKey) return "#ede9fe";
-  if (inRange && isBlackKey) return "#3b2a5c";
+  // Range highlight: deutliche violettblaue Tönung für den aktiven Bereich
+  if (inRange && !isBlackKey) return "#c4b5fd";
+  if (inRange && isBlackKey) return "#6d28d9";
 
   // Normal idle fill
   return isBlackKey ? "#1f1f28" : "#f8f7f4";
@@ -130,6 +133,7 @@ function resolveFrontFaceFill(
   if (state === "correct") return isBlackKey ? "#0f7a37" : "#16a34a";
   if (state === "wrong") return isBlackKey ? "#991b1b" : "#dc2626";
   if (state === "current") return isBlackKey ? "#a87f06" : "#ca9a0a";
+  if (state === "focused") return isBlackKey ? "#5b21b6" : "#8b5cf6";
   if (dimmed) return isBlackKey ? "#3a3a44" : "#b0b0b5";
   return isBlackKey ? "#15151c" : "#d8d5cc";
 }
@@ -155,6 +159,47 @@ type KeyHitProps = {
 };
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+
+// ── Blinkender Marker für Ziel-/Falsch-Note (deutlich sichtbar) ──────────
+const BlinkMarker = memo(function BlinkMarker({
+  left,
+  width,
+  height,
+  color,
+}: {
+  left: number;
+  width: number;
+  height: number;
+  color: string;
+}) {
+  const opacity = useSharedValue(1);
+
+  useEffect(() => {
+    opacity.value = withRepeat(
+      withTiming(0.2, { duration: 450, easing: Easing.inOut(Easing.quad) }),
+      -1, // unendlich, Vorwärts+Rückwärts
+      true,
+    );
+    return () => {
+      opacity.value = 1;
+      cancelAnimation(opacity);
+    };
+  }, [opacity]);
+
+  const style = useAnimatedStyle(() => ({
+    position: "absolute",
+    top: 0,
+    left,
+    width,
+    height,
+    backgroundColor: color,
+    opacity: opacity.value,
+    zIndex: 5,
+    borderRadius: 2,
+  }));
+
+  return <Animated.View pointerEvents="none" style={style} />;
+});
 
 const KeyHit = memo(function KeyHit({
   left,
@@ -203,8 +248,8 @@ export function PianoKeyboard({
   greenKeys,
   visibleRange,
 }: PianoKeyboardProps) {
-  const { width } = useWindowDimensions();
-  const isPortrait = width < 520;
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const isPortrait = windowWidth < 520;
   const [viewportWidth, setViewportWidth] = useState(0);
   const isFirstLayout = useRef(true);
 
@@ -234,14 +279,6 @@ export function PianoKeyboard({
       ) {
         state = "focused";
       }
-      // Falsch gespielte Note → rot
-      if (
-        wrongMidi !== null &&
-        wrongMidi !== undefined &&
-        key.midi === wrongMidi
-      ) {
-        state = "wrong";
-      }
       // Zielnote: bei falscher Antwort grün (richtig), sonst gold/feedback
       if (
         targetMidi !== null &&
@@ -252,6 +289,15 @@ export function PianoKeyboard({
         else if (feedback === "incorrect")
           state = "correct"; // grün = richtige Lösung
         else state = "current";
+      }
+      // Falsch gespielte Note → rot (gewinnt über Target, damit bei
+      // „Falsch – es war X“ die Taste rot statt grün erscheint)
+      if (
+        wrongMidi !== null &&
+        wrongMidi !== undefined &&
+        key.midi === wrongMidi
+      ) {
+        state = "wrong";
       }
       const note = keyLabels?.[key.midi] ?? key.note;
       return { ...key, state, note };
@@ -275,10 +321,20 @@ export function PianoKeyboard({
     [keyboardKeys],
   );
 
-  // Natural key width — height is derived from the aspect ratio so keys
-  // always have real piano proportions.
-  const naturalWhiteKeyWidth = isPortrait ? 16 : 24;
+  // ── Sizing: aus dem verfügbaren Platz ableiten, NICHT fix ──────────────
+  // Früher: fixe 16/24px-Tasten bei 52 weißen Tasten → natürliche Breite
+  // 832–1248px, die per overviewScale auf ~0.5 geschrumpft wurde → Mini-
+  // Keyboard (~46px hoch). Jetzt: Tastenbreite = Viewportbreite / Anzahl,
+  // zusätzlich durch eine Höhen-Obergrenze begrenzt.
   const whiteKeyCount = Math.max(1, whiteKeys.length);
+  // Vor erstem Layout: Schätzung aus Fensterbreite (verhindert Mini-Layout)
+  const effectiveViewportWidth =
+    viewportWidth > 0 ? viewportWidth : Math.max(280, windowWidth - 16);
+  // Klaviatur-Höhe auf ~30% der Fensterhöhe begrenzen (min. 120px)
+  const maxKeyboardHeight = Math.max(120, windowHeight * 0.3);
+  const widthForKey = effectiveViewportWidth / whiteKeyCount;
+  const heightForKey = maxKeyboardHeight / KEY_ASPECT_RATIO;
+  const naturalWhiteKeyWidth = Math.max(8, Math.min(widthForKey, heightForKey));
   const naturalKeyboardWidth = whiteKeyCount * naturalWhiteKeyWidth;
   const keyboardWidth = naturalKeyboardWidth;
   const pianoHeight = naturalWhiteKeyWidth * KEY_ASPECT_RATIO;
@@ -416,6 +472,24 @@ export function PianoKeyboard({
     setViewportWidth(e.nativeEvent.layout.width);
   }
 
+  // Marker-Geometrie für eine MIDI-Note (weiß oder schwarz)
+  function getKeyGeometry(midi: number) {
+    if (isBlackMidi(midi)) {
+      const left = getBlackLeft(whiteKeys, keyWidth, { midi } as PianoKey);
+      return { left, width: blackKeyWidth, height: blackKeyHeight };
+    }
+    const index = whiteKeys.findIndex((k) => k.midi === midi);
+    if (index < 0) return null;
+    return { left: index * keyWidth, width: keyWidth, height: pianoHeight };
+  }
+
+  const showTargetMarker =
+    targetMidi !== null &&
+    targetMidi !== undefined &&
+    (feedback === "correct" || feedback === "incorrect") &&
+    wrongMidi !== targetMidi; // roter Marker gewinnt bei derselben Taste
+  const showWrongMarker = wrongMidi !== null && wrongMidi !== undefined;
+
   return (
     <ThemedView style={styles.shell}>
       <Animated.View
@@ -543,6 +617,22 @@ export function PianoKeyboard({
               />
             );
           })}
+
+          {/* Blinkende Ergebnis-Marker: Zielnote grün, Falsch-Note rot */}
+          {showTargetMarker &&
+            (() => {
+              const g = getKeyGeometry(targetMidi as number);
+              return g ? (
+                <BlinkMarker key={`target-${targetMidi}`} {...g} color="#22c55e" />
+              ) : null;
+            })()}
+          {showWrongMarker &&
+            (() => {
+              const g = getKeyGeometry(wrongMidi as number);
+              return g ? (
+                <BlinkMarker key={`wrong-${wrongMidi}`} {...g} color="#ef4444" />
+              ) : null;
+            })()}
         </Animated.View>
       </Animated.View>
     </ThemedView>

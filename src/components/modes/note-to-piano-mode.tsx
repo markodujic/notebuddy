@@ -79,6 +79,8 @@ export function NoteToPianoMode({ onExit }: NoteToPianoModeProps) {
   // ── Local state ──
   const [phase, setPhase] = useState<ModePhase>('listening');
   const [feedbackCorrect, setFeedbackCorrect] = useState(false);
+  const [awaitingContinue, setAwaitingContinue] = useState(false);
+  const [sungMidi, setSungMidi] = useState<number | null>(null);
   const [micErrorMessage, setMicErrorMessage] = useState<string | null>(null);
   const [runKey, setRunKey] = useState(0);
 
@@ -192,23 +194,38 @@ export function NoteToPianoMode({ onExit }: NoteToPianoModeProps) {
 
       setPhase('result');
       setFeedbackCorrect(result.correct);
+      // Gesungene/gespielte Note merken → auf der Klaviatur markieren
+      setSungMidi(detectedMidi);
       audio.stopListening();
 
-      const delay = result.correct
-        ? LEARNING_CONFIG.FEEDBACK_CORRECT_MS
-        : LEARNING_CONFIG.FEEDBACK_INCORRECT_MS;
-
-      setTimeout(() => {
-        if (session.isComplete) {
-          setPhase('end');
-          setAppState('end');
-        } else {
-          session.nextExercise();
-        }
-      }, delay);
+      // Falsche Antwort: Feedback bleibt bis zum Tap stehen (kein Timeout).
+      // Richtige Antwort: Auto-Advance nach 1200ms.
+      setAwaitingContinue(!result.correct);
+      if (result.correct) {
+        const delay = LEARNING_CONFIG.FEEDBACK_CORRECT_MS;
+        setTimeout(() => {
+          if (session.isComplete) {
+            setPhase('end');
+            setAppState('end');
+          } else {
+            session.nextExercise();
+          }
+        }, delay);
+      }
     },
     [session, audio, setAppState],
   );
+
+  // ── Nach falscher Antwort: Tap irgendwo → nächste Aufgabe ──
+  const continueToNext = useCallback(() => {
+    setAwaitingContinue(false);
+    if (session.isComplete) {
+      setPhase('end');
+      setAppState('end');
+    } else {
+      session.nextExercise();
+    }
+  }, [session, setAppState]);
 
   useEffect(() => {
     submitAnswerRef.current = submitAnswer;
@@ -437,13 +454,24 @@ export function NoteToPianoMode({ onExit }: NoteToPianoModeProps) {
         <View style={styles.keyboardArea}>
           <PianoKeyboard
             targetMidi={phase === 'result' ? targetMidi : null}
-            highlightMidi={phase === 'result' ? targetMidi : null}
+            wrongMidi={phase === 'result' && !feedbackCorrect ? sungMidi : null}
             feedback={phase === 'result' ? (feedbackCorrect ? 'correct' : 'incorrect') : null}
             interactive={false}
             focusRange={[effectiveRange.minMidi, effectiveRange.maxMidi]}
           />
         </View>
       </View>
+
+      {/* Nach falscher Antwort: Tap irgendwo → nächste Aufgabe */}
+      {phase === 'result' && awaitingContinue ? (
+        <Pressable style={styles.continueOverlay} onPress={continueToNext}>
+          <View style={styles.continueHint}>
+            <Text style={styles.continueHintText}>
+              Tippen zum Weitermachen →
+            </Text>
+          </View>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -538,6 +566,33 @@ const styles = StyleSheet.create({
   // Keyboard unten
   keyboardArea: {
     padding: 8,
+    // Sicherstellt, dass die Klaviatur sichtbar bleibt, auch wenn der
+    // Inhalt oben viel Platz beansprucht.
+    minHeight: 140,
+  },
+
+  // Tap-Overlay nach falscher Antwort
+  continueOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 100,
+  },
+  continueHint: {
+    position: 'absolute',
+    bottom: 32,
+    alignSelf: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: 'rgba(26, 26, 46, 0.85)',
+  },
+  continueHintText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
   },
 
   // Mikrofon-Fehler
