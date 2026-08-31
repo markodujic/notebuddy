@@ -233,6 +233,8 @@ const KeyHit = memo(function KeyHit({
     height,
     zIndex,
     backgroundColor: `rgba(255,255,255,${highlight.value})`,
+    // Physischer „Dip": Taste senkt sich beim Druck leicht ab (UI-Thread)
+    transform: [{ translateY: highlight.value * 7 }],
   }));
 
   return (
