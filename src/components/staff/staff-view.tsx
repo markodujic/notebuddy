@@ -31,6 +31,8 @@ import {
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import {
+  Easing,
+  useDerivedValue,
   useSharedValue,
   withRepeat,
   withSequence,
@@ -88,6 +90,10 @@ type StaffCanvasProps = {
   hoverPosition: StaffPosition | null;
   fadeOpacity: SharedValue<number>;
   blinkOpacity: SharedValue<number>;
+  /** Horizontale Shake-Animation für falsche Note (px, UI-Thread). */
+  shakeX: SharedValue<number>;
+  /** Atem-Puls des Glow-Rings (UI-Thread). */
+  glowPulse: SharedValue<number>;
   showGlow: boolean;
 };
 
@@ -171,6 +177,8 @@ function StaffCanvasInner({
   hoverPosition,
   fadeOpacity,
   blinkOpacity,
+  shakeX,
+  glowPulse,
   showGlow,
 }: StaffCanvasProps) {
   const bravuraTrebleFont = useFont(BRAVURA_FONT_FAMILY, STAFF_METRICS.CLEF_TREBLE_SIZE);
@@ -220,6 +228,9 @@ function StaffCanvasInner({
 
   // Middle line für Stem-Richtung
   const middleLineY = lineYs[2];
+
+  // Shake-Transform für die falsche Note (nativ, UI-Thread)
+  const wrongShake = useDerivedValue(() => [{ translateX: shakeX.value }]);
 
   // Notenkopf-Halbbreite (gemessen) – Hals sitzt exakt an der Glyph-Kante
   const headHalfW = noteFont
@@ -295,9 +306,9 @@ function StaffCanvasInner({
         </Group>
       ))}
 
-      {/* ── Falsche Note (blinkend, darkred) ── */}
+      {/* ── Falsche Note (blinkend + Shake, darkred) ── */}
       {wrongPosition && (
-        <>
+        <Group transform={wrongShake}>
           {/* Hilfslinien für wrong note */}
           {wrongLedgers.map((y, i) => (
             <Line
@@ -351,7 +362,7 @@ function StaffCanvasInner({
               opacity={blinkOpacity}
             />
           )}
-        </>
+        </Group>
       )}
 
       {/* ── Display-Note ── */}
@@ -368,7 +379,7 @@ function StaffCanvasInner({
               style="stroke"
               strokeWidth={8}
               strokeJoin="round"
-              opacity={fadeOpacity}
+              opacity={glowPulse}
             />
           )}
           {/* Stem */}
@@ -474,6 +485,10 @@ export const StaffView = memo(function StaffView({
   const fadeOpacity = useSharedValue(1);
   // Animation: Blink für falsche Note (oszilliert 0.3 ↔ 1.0, 300ms)
   const blinkOpacity = useSharedValue(1);
+  // Animation: Shake für falsche Note (kurz, 2px, native)
+  const shakeX = useSharedValue(0);
+  // Animation: Atem-Puls für den Glow-Ring (native)
+  const glowPulse = useSharedValue(1);
 
   // Hover State
   const [hoverPosition, setHoverPosition] = useState<StaffPosition | null>(
@@ -527,6 +542,37 @@ export const StaffView = memo(function StaffView({
     }
   }, [wrongPosition, blinkOpacity]);
 
+  // ── Shake für falsche Note (3 kurze Zyklen, dann Ruhe) ──
+  useEffect(() => {
+    if (wrongPosition) {
+      shakeX.set(
+        withSequence(
+          withTiming(2.5, { duration: 70 }),
+          withTiming(-2.5, { duration: 130 }),
+          withTiming(1.8, { duration: 110 }),
+          withTiming(-1.8, { duration: 110 }),
+          withTiming(0, { duration: 90 }),
+        ),
+      );
+    } else {
+      shakeX.set(0);
+    }
+  }, [wrongPosition, shakeX]);
+
+  // ── Atem-Puls des Glow-Rings (ein Zyklus: kurz dunkel, dann voll) ──
+  useEffect(() => {
+    if (showGlow && displayPosition) {
+      glowPulse.set(
+        withSequence(
+          withTiming(0.1, { duration: 250 }),
+          withTiming(1, { duration: 450, easing: Easing.out(Easing.quad) }),
+        ),
+      );
+    } else {
+      glowPulse.set(1);
+    }
+  }, [showGlow, displayPosition, glowPulse]);
+
   // ── Touch Handler (1:1: Klicks gesperrt während wrongPosition angezeigt wird) ──
   const handlePress = useCallback(
     (y: number) => {
@@ -571,6 +617,8 @@ export const StaffView = memo(function StaffView({
           hoverPosition={hoverPosition}
           fadeOpacity={fadeOpacity}
           blinkOpacity={blinkOpacity}
+          shakeX={shakeX}
+          glowPulse={glowPulse}
           showGlow={showGlow}
         />
       </Pressable>
