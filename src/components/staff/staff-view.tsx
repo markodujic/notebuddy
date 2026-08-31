@@ -159,6 +159,20 @@ function useParchmentPicture(
       canvas.drawLine(0, y, width, endY, fiberPaint);
     }
 
+    // Dark-Theme: dezente Vignette (Ränder etwas dunkler)
+    if (colors === PARCHMENT_COLORS.DARK) {
+      const vignettePaint = Skia.Paint();
+      const shader = Skia.Shader.MakeRadialGradient(
+        { x: width / 2, y: height / 2 },
+        Math.max(width, height) * 0.75,
+        [Skia.Color("rgba(0,0,0,0)"), Skia.Color("rgba(0,0,0,0.25)")],
+        [0, 1],
+        0,
+      );
+      vignettePaint.setShader(shader);
+      canvas.drawRect(Skia.XYWHRect(0, 0, width, height), vignettePaint);
+    }
+
     return recorder.finishRecordingAsPicture();
   }, [width, height, colors]);
 }
