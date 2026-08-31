@@ -20,13 +20,9 @@ import {
   Group,
   Line,
   Picture,
-  Rect,
   RoundedRect,
-  Skia,
   Text,
   useFont,
-  type SkFont,
-  type SkPicture,
 } from "@shopify/react-native-skia";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
@@ -41,14 +37,22 @@ import {
 } from "react-native-reanimated";
 
 import {
-  BRAVURA_FONT_FAMILY,
-  PARCHMENT_COLORS,
-  SMUFL,
   STAFF_FEEDBACK_COLORS,
   STAFF_METRICS,
+  PARCHMENT_COLORS,
+  BRAVURA_FONT_FAMILY,
 } from "@/constants/music-font";
 import { getNoteStaffPosition, type Clef, type StaffPosition } from "@/domain";
 import { useAppStore } from "@/stores/app-store";
+import { useParchmentPicture } from "./parchment-picture";
+import { noteHeadGeom } from "./staff-glyphs";
+import {
+  ClefGlyph,
+  LedgerLines,
+  NoteHeadGlyph,
+  StaffLines,
+  Stem,
+} from "./staff-primitives";
 import {
   STAFF_HEIGHT,
   getLedgerLineYs,
@@ -96,97 +100,6 @@ type StaffCanvasProps = {
   glowPulse: SharedValue<number>;
   showGlow: boolean;
 };
-
-// ── Helpers: Bravura-Glyph-Messung ──────────────────────────────────────────
-
-/** Geometrie eines Bravura-Glyphs relativ zur Text-Baseline (Ursprung). */
-export interface GlyphGeom {
-  /** Distanz Baseline → horizontaler Glyph-Mittelpunkt (immer > 0). */
-  centerX: number;
-  /** Distanz Baseline → vertikaler Glyph-Mittelpunkt (negativ = oberhalb). */
-  centerY: number;
-}
-
-/**
- * Misst ein Bravura-Glyph metrikunabhängig über seine Ink-Box (SkRect).
- * `measureText` liefert ein Rect mit `y` relativ zur Baseline (negativ =
- * darüber). Damit lassen sich Glyphen exakt auf einer Zielposition zentrieren,
- * egal wie die Font ihre Boxen zur Baseline legt (SMuFL-Nominalkonvention
- * „Notenkopf baselinezentriert" wird NICHT vorausgesetzt).
- */
-function glyphGeom(font: SkFont, text: string): GlyphGeom {
-  const r = font.measureText(text);
-  return { centerX: r.x + r.width / 2, centerY: r.y + r.height / 2 };
-}
-
-// ── Parchment Texture (einmalig offscreen gezeichnet, 1 Draw-Call) ─────────
-
-/**
- * Zeichnet die Pergament-Textur (Hintergrund + Rauschen + Fasern) einmalig
- * in ein offscreen Skia-Picture. Beim Rendern kostet es genau einen
- * Draw-Call statt ~800 einzelner Rects/Lines – und die Zufallswerte
- * (Faser-Enden) bleiben fixiert, statt bei jedem Re-Render zu zappeln.
- */
-function useParchmentPicture(
-  width: number,
-  height: number,
-  colors: (typeof PARCHMENT_COLORS)[keyof typeof PARCHMENT_COLORS],
-): SkPicture | null {
-  return useMemo(() => {
-    if (width <= 0 || height <= 0) return null;
-    const recorder = Skia.PictureRecorder();
-    const canvas = recorder.beginRecording(
-      Skia.XYWHRect(0, 0, width, height),
-    );
-
-    // Hintergrund
-    const bgPaint = Skia.Paint();
-    bgPaint.setColor(Skia.Color(colors.bg));
-    canvas.drawRect(Skia.XYWHRect(0, 0, width, height), bgPaint);
-
-    // Subtle noise (4×4 Pixel Blöcke, wie createTextureCache() im Original)
-    const noisePaint = Skia.Paint();
-    for (let px = 0; px < width; px += 4) {
-      for (let py = 0; py < height; py += 4) {
-        const noise = Math.random();
-        if (noise > 0.5) {
-          noisePaint.setColor(
-            Skia.Color(noise > 0.75 ? colors.fiber1 : colors.fiber2),
-          );
-          noisePaint.setAlphaf(0.03);
-          canvas.drawRect(Skia.XYWHRect(px, py, 4, 4), noisePaint);
-        }
-      }
-    }
-
-    // Horizontal fibers (12 zufällige Linien, Enden einmalig fixiert)
-    const fiberPaint = Skia.Paint();
-    fiberPaint.setStrokeWidth(0.5);
-    fiberPaint.setAlphaf(0.015);
-    fiberPaint.setColor(Skia.Color(colors.fiber1));
-    for (let fi = 0; fi < 12; fi++) {
-      const y = Math.random() * height;
-      const endY = y + (Math.random() - 0.5) * 3;
-      canvas.drawLine(0, y, width, endY, fiberPaint);
-    }
-
-    // Dark-Theme: dezente Vignette (Ränder etwas dunkler)
-    if (colors === PARCHMENT_COLORS.DARK) {
-      const vignettePaint = Skia.Paint();
-      const shader = Skia.Shader.MakeRadialGradient(
-        { x: width / 2, y: height / 2 },
-        Math.max(width, height) * 0.75,
-        [Skia.Color("rgba(0,0,0,0)"), Skia.Color("rgba(0,0,0,0.25)")],
-        [0, 1],
-        0,
-      );
-      vignettePaint.setShader(shader);
-      canvas.drawRect(Skia.XYWHRect(0, 0, width, height), vignettePaint);
-    }
-
-    return recorder.finishRecordingAsPicture();
-  }, [width, height, colors]);
-}
 
 // ── Inner Canvas Component ────────────────────────────────────────────────
 
@@ -257,14 +170,8 @@ function StaffCanvasInner({
   // Shake-Transform für die falsche Note (nativ, UI-Thread)
   const wrongShake = useDerivedValue(() => [{ translateX: shakeX.value }]);
 
-  // Notenkopf-Geometrie (gemessen) – Kopf exakt auf Note-Position zentrieren:
-// Baseline-Y = noteY − centerY, X = noteX − centerX (Ink-Box-Mitte)
-  const headGeom: GlyphGeom = noteFont
-    ? glyphGeom(noteFont, SMUFL.NOTE_HEAD_FILLED)
-    : {
-        centerX: (STAFF_METRICS.NOTE_HEAD_WIDTH_SPACES * STAFF_METRICS.LINE_SPACING) / 2,
-        centerY: 0,
-      };
+  // Notenkopf-Geometrie (gemessen) – Kopf exakt auf Note-Position zentrieren
+  const headGeom = noteHeadGeom(noteFont);
   const stemOffsetX = headGeom.centerX;
 
   return (
@@ -286,107 +193,61 @@ function StaffCanvasInner({
       </Group>
 
       {/* ── 5 Hauptlinien ── */}
-      {lineYs.map((y, i) => (
-        <Line
-          key={`line-${i}`}
-          p1={{ x: 15, y }}
-          p2={{ x: width - 15, y }}
-          color={parchmentColors.staffLine}
-          strokeWidth={STAFF_METRICS.LINE_WIDTH}
-        />
-      ))}
+      <StaffLines lineYs={lineYs} x0={15} x1={width - 15} color={parchmentColors.staffLine} />
 
       {/* ── Schlüssel ── */}
-      {clef === "treble"
-        ? bravuraTrebleFont && (
-            <Text
-              x={clefX}
-              y={lineYs[3]} // G-Linie (2. von unten = index 3)
-              text={SMUFL.TREBLE_CLEF}
-              font={bravuraTrebleFont}
-              color={parchmentColors.clef}
-            />
-          )
-        : bravuraBassFont && (
-            <Text
-              x={clefX}
-              y={lineYs[1]} // F-Linie (4. von unten = index 1)
-              text={SMUFL.BASS_CLEF}
-              font={bravuraBassFont}
-              color={parchmentColors.clef}
-            />
-          )}
+      {clef === "treble" ? (
+        <ClefGlyph
+          clef="treble"
+          x={clefX}
+          lineYs={lineYs}
+          font={bravuraTrebleFont}
+          color={parchmentColors.clef}
+        />
+      ) : (
+        <ClefGlyph
+          clef="bass"
+          x={clefX}
+          lineYs={lineYs}
+          font={bravuraBassFont}
+          color={parchmentColors.clef}
+        />
+      )}
 
       {/* ── Hilfslinien für Display-Note (mit Pergament-Freilegung, 1:1) ── */}
-      {displayLedgers.map((y, i) => (
-        <Group key={`dl-${i}`}>
-          <Line
-            p1={{ x: noteX - STAFF_METRICS.LEDGER_CLEAR_EXTEND, y }}
-            p2={{ x: noteX + STAFF_METRICS.LEDGER_CLEAR_EXTEND, y }}
-            color={parchmentColors.bg}
-            strokeWidth={STAFF_METRICS.LEDGER_CLEAR_WIDTH}
-          />
-          <Line
-            p1={{ x: noteX - STAFF_METRICS.LEDGER_LINE_EXTEND, y }}
-            p2={{ x: noteX + STAFF_METRICS.LEDGER_LINE_EXTEND, y }}
-            color={parchmentColors.staffLine}
-            strokeWidth={STAFF_METRICS.LEDGER_LINE_WIDTH}
-          />
-        </Group>
-      ))}
+      <LedgerLines
+        ys={displayLedgers}
+        noteX={noteX}
+        color={parchmentColors.staffLine}
+        clearColor={parchmentColors.bg}
+      />
 
       {/* ── Falsche Note (blinkend + Shake, darkred) ── */}
       {wrongPosition && (
         <Group transform={wrongShake}>
-          {/* Hilfslinien für wrong note */}
-          {wrongLedgers.map((y, i) => (
-            <Line
-              key={`wl-${i}`}
-              p1={{ x: noteX - STAFF_METRICS.LEDGER_CLEAR_EXTEND, y }}
-              p2={{ x: noteX + STAFF_METRICS.LEDGER_CLEAR_EXTEND, y }}
-              color={parchmentColors.bg}
-              strokeWidth={STAFF_METRICS.LEDGER_CLEAR_WIDTH}
-            />
-          ))}
-          {wrongLedgers.map((y, i) => (
-            <Line
-              key={`wlc-${i}`}
-              p1={{ x: noteX - STAFF_METRICS.LEDGER_LINE_EXTEND, y }}
-              p2={{ x: noteX + STAFF_METRICS.LEDGER_LINE_EXTEND, y }}
-              color={parchmentColors.staffLine}
-              strokeWidth={STAFF_METRICS.LEDGER_LINE_WIDTH}
-            />
-          ))}
+          {/* Hilfslinien für wrong note (mit Pergament-Freilegung) */}
+          <LedgerLines
+            ys={wrongLedgers}
+            noteX={noteX}
+            color={parchmentColors.staffLine}
+            clearColor={parchmentColors.bg}
+          />
           {/* Stem */}
-          <Line
-            p1={{
-              x:
-                wrongY > middleLineY
-                  ? noteX + stemOffsetX
-                  : noteX - stemOffsetX,
-              y: wrongY,
-            }}
-            p2={{
-              x:
-                wrongY > middleLineY
-                  ? noteX + stemOffsetX
-                  : noteX - stemOffsetX,
-              y:
-                wrongY > middleLineY
-                  ? wrongY - STAFF_METRICS.STEM_HEIGHT
-                  : wrongY + STAFF_METRICS.STEM_HEIGHT,
-            }}
+          <Stem
+            x={noteX}
+            noteY={wrongY}
+            middleLineY={middleLineY}
+            halfWidth={stemOffsetX}
             color={STAFF_FEEDBACK_COLORS.WRONG_BLINK}
-            strokeWidth={STAFF_METRICS.STEM_WIDTH}
             opacity={blinkOpacity}
           />
           {/* Notenkopf als Bravura-Glyph (Ink-Box auf wrongY zentriert) */}
           {noteFont && (
-            <Text
-              x={noteX - headGeom.centerX}
-              y={wrongY - headGeom.centerY}
-              text={SMUFL.NOTE_HEAD_FILLED}
+            <NoteHeadGlyph
               font={noteFont}
+              geom={headGeom}
+              x={noteX}
+              y={wrongY}
               color={STAFF_FEEDBACK_COLORS.WRONG_BLINK}
               opacity={blinkOpacity}
             />
@@ -399,48 +260,33 @@ function StaffCanvasInner({
         <>
           {/* Glow-Effekt für korrekte Antworten (grüner Ring um Glyph) */}
           {showGlow && noteFont && (
-            <Text
-              x={noteX - headGeom.centerX}
-              y={displayY - headGeom.centerY}
-              text={SMUFL.NOTE_HEAD_FILLED}
+            <NoteHeadGlyph
               font={noteFont}
+              geom={headGeom}
+              x={noteX}
+              y={displayY}
               color={STAFF_FEEDBACK_COLORS.CORRECT_GLOW}
-              style="stroke"
-              strokeWidth={8}
-              strokeJoin="round"
+              outline
+              outlineWidth={8}
               opacity={glowPulse}
             />
           )}
           {/* Stem */}
-          <Line
-            p1={{
-              x:
-                displayY > middleLineY
-                  ? noteX + stemOffsetX
-                  : noteX - stemOffsetX,
-              y: displayY,
-            }}
-            p2={{
-              x:
-                displayY > middleLineY
-                  ? noteX + stemOffsetX
-                  : noteX - stemOffsetX,
-              y:
-                displayY > middleLineY
-                  ? displayY - STAFF_METRICS.STEM_HEIGHT
-                  : displayY + STAFF_METRICS.STEM_HEIGHT,
-            }}
+          <Stem
+            x={noteX}
+            noteY={displayY}
+            middleLineY={middleLineY}
+            halfWidth={stemOffsetX}
             color={displayColor}
-            strokeWidth={STAFF_METRICS.STEM_WIDTH}
             opacity={fadeOpacity}
           />
           {/* Notenkopf als Bravura-Glyph (Ink-Box auf displayY zentriert) */}
           {noteFont && (
-            <Text
-              x={noteX - headGeom.centerX}
-              y={displayY - headGeom.centerY}
-              text={SMUFL.NOTE_HEAD_FILLED}
+            <NoteHeadGlyph
               font={noteFont}
+              geom={headGeom}
+              x={noteX}
+              y={displayY}
               color={displayColor}
               opacity={fadeOpacity}
             />
@@ -452,15 +298,12 @@ function StaffCanvasInner({
       {hoverPosition && !displayPosition && !wrongPosition && (
         <>
           {/* Hilfslinien für Hover-Position */}
-          {hoverLedgers.map((y, i) => (
-            <Line
-              key={`hl-${i}`}
-              p1={{ x: noteX - 20, y }}
-              p2={{ x: noteX + 20, y }}
-              color={parchmentColors.staffLine}
-              strokeWidth={STAFF_METRICS.LEDGER_LINE_WIDTH}
-            />
-          ))}
+          <LedgerLines
+            ys={hoverLedgers}
+            noteX={noteX}
+            color={parchmentColors.staffLine}
+            extend={20}
+          />
           {/* Kreis */}
           <RoundedRect
             x={noteX - STAFF_METRICS.HOVER_RADIUS}
@@ -472,14 +315,14 @@ function StaffCanvasInner({
           />
           {/* Notenkopf-Umriss als Glyph */}
           {noteFont && (
-            <Text
-              x={noteX - headGeom.centerX}
-              y={hoverY - headGeom.centerY}
-              text={SMUFL.NOTE_HEAD_FILLED}
+            <NoteHeadGlyph
               font={noteFont}
+              geom={headGeom}
+              x={noteX}
+              y={hoverY}
               color={STAFF_FEEDBACK_COLORS.HOVER_STROKE}
-              style="stroke"
-              strokeWidth={2}
+              outline
+              outlineWidth={2}
             />
           )}
         </>
