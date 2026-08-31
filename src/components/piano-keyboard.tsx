@@ -256,7 +256,7 @@ const KeyHit = memo(function KeyHit({
   );
 });
 
-export function PianoKeyboard({
+export const PianoKeyboard = memo(function PianoKeyboard({
   keys,
   focusRange,
   zoomMode = "overview",
@@ -684,7 +684,7 @@ export function PianoKeyboard({
       </Animated.View>
     </ThemedView>
   );
-}
+});
 
 const styles = StyleSheet.create({
   shell: {
