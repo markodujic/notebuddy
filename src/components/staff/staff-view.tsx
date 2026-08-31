@@ -447,12 +447,22 @@ export const StaffView = memo(function StaffView({
   // ── Touch Handler (1:1: Klicks gesperrt während wrongPosition angezeigt wird) ──
   const handlePress = useCallback(
     (y: number) => {
+      // Hover-Indikator sofort entfernen – sonst überlagert er die
+      // unmittelbar darauf erscheinende Feedback-Note (Kreis + Umriss
+      // flackern mit Blink/Fade "hin und her", bis onTouchEnd feuert).
+      setHoverPosition(null);
       if (!interactive || !onPositionSelect || wrongPosition) return;
       const pos = getPositionFromY(y, topY);
       if (pos) onPositionSelect(pos);
     },
     [interactive, onPositionSelect, topY, wrongPosition],
   );
+
+  // Sicherheitsnetz: sobald eine Display- oder Wrong-Note erscheint,
+  // darf kein Hover-Indikator mehr darüber liegen.
+  useEffect(() => {
+    if (displayPosition || wrongPosition) setHoverPosition(null);
+  }, [displayPosition, wrongPosition]);
 
   const handleMove = useCallback(
     (y: number) => {
