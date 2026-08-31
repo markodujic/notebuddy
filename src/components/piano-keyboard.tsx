@@ -1,4 +1,9 @@
-import { Canvas, Group, Rect } from "@shopify/react-native-skia";
+import {
+  Canvas,
+  Group,
+  LinearGradient,
+  Rect,
+} from "@shopify/react-native-skia";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import {
   LayoutChangeEvent,
@@ -79,6 +84,24 @@ const OVERVIEW_PERSPECTIVE = 2000;
 const KEY_DEPTH = 6;
 /** Anteil der Taste, der als Frontkante (dunkler) gezeichnet wird */
 const FRONT_FACE_RATIO = 0.08;
+
+/** Premium-Verläufe (gleiche Palette wie RangeSelector). */
+const KEY_GRADIENTS = {
+  whiteIdle: ["#fdfdfb", "#e8e5de"],
+  whiteRange: ["#ddd6fe", "#a78bfa"],
+  blackIdle: ["#3d3d49", "#141419"],
+} as const;
+
+/** Vertikaler Verlauf als Paint-Kind eines Rects (falls nicht dimmed/state). */
+function KeyGradient({ colors, height }: { colors: readonly [string, string] | readonly string[]; height: number }) {
+  return (
+    <LinearGradient
+      start={{ x: 0, y: 0 }}
+      end={{ x: 0, y: height }}
+      colors={colors as unknown as string[]}
+    />
+  );
+}
 
 function isBlackMidi(midi: number) {
   return [1, 3, 6, 8, 10].includes(midi % 12);
@@ -509,21 +532,28 @@ export function PianoKeyboard({
           ]}
         >
           <Canvas style={{ width: keyboardWidth, height: pianoHeight }}>
-            {whiteKeys.map((key, index) => (
-              <Group key={key.midi}>
-                {/* Weiße Taste – Hauptkörper */}
-                <Rect
-                  x={index * keyWidth}
-                  y={0}
-                  width={keyWidth}
-                  height={pianoHeight}
-                  color={resolveKeyFill(
-                    key,
-                    false,
-                    isDimmed(key.midi),
-                    isInRange(key.midi),
-                  )}
-                />
+            {whiteKeys.map((key, index) => {
+              const dimmed = isDimmed(key.midi);
+              const inRange = isInRange(key.midi);
+              const isIdle = (key.state ?? "idle") === "idle";
+              return (
+                <Group key={key.midi}>
+                  {/* Weiße Taste – Hauptkörper (Premium-Verlauf im Idle/Zustand) */}
+                  <Rect
+                    x={index * keyWidth}
+                    y={0}
+                    width={keyWidth}
+                    height={pianoHeight}
+                    color={resolveKeyFill(key, false, dimmed, inRange)}
+                  >
+                    {isIdle &&
+                      !dimmed &&
+                      (inRange ? (
+                        <KeyGradient colors={KEY_GRADIENTS.whiteRange} height={pianoHeight} />
+                      ) : (
+                        <KeyGradient colors={KEY_GRADIENTS.whiteIdle} height={pianoHeight} />
+                      ))}
+                  </Rect>
                 {/* Frontkante – dunkler (Tiefe-Simulation bei 3D-Neigung) */}
                 <Rect
                   x={index * keyWidth}
@@ -543,7 +573,8 @@ export function PianoKeyboard({
                   strokeWidth={1}
                 />
               </Group>
-            ))}
+              );
+            })}
 
             {/* C2: shadow rects beneath black keys */}
             {blackKeys.map((key) => {
@@ -563,6 +594,8 @@ export function PianoKeyboard({
             {/* C2+C3: black keys with shadow */}
             {blackKeys.map((key) => {
               const x = getBlackLeft(whiteKeys, keyWidth, key);
+              const dimmed = isDimmed(key.midi);
+              const isIdle = (key.state ?? "idle") === "idle";
               return (
                 <Group key={key.midi}>
                   <Rect
@@ -573,10 +606,24 @@ export function PianoKeyboard({
                     color={resolveKeyFill(
                       key,
                       true,
-                      isDimmed(key.midi),
+                      dimmed,
                       isInRange(key.midi),
                     )}
-                  />
+                  >
+                    {isIdle && !dimmed && (
+                      <KeyGradient colors={KEY_GRADIENTS.blackIdle} height={blackKeyHeight} />
+                    )}
+                  </Rect>
+                  {/* Glanzkante (Gloss) oben auf der schwarzen Taste */}
+                  {isIdle && !dimmed && (
+                    <Rect
+                      x={x + blackKeyWidth * 0.15}
+                      y={blackKeyHeight * 0.06}
+                      width={blackKeyWidth * 0.7}
+                      height={blackKeyHeight * 0.18}
+                      color="rgba(255,255,255,0.12)"
+                    />
+                  )}
                   {/* Schwarze Taste Frontkante */}
                   <Rect
                     x={x}
