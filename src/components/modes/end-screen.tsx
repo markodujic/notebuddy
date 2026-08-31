@@ -6,6 +6,7 @@
  */
 
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { BaseButton } from '@/components/ui/base-button';
 
 import { ErrorStats } from '@/components/feedback/error-stats';
 import { type Weighting } from '@/domain';
@@ -64,12 +65,12 @@ export function EndScreen({
       <ErrorStats weighting={weighting} show />
 
       <View style={styles.buttonRow}>
-        <Pressable onPress={onBack} style={[styles.btnSecondary, { backgroundColor: theme.bgHover }]}>
+        <BaseButton onPress={onBack} style={[styles.btnSecondary, { backgroundColor: theme.bgHover }]}>
           <Text style={[styles.btnSecondaryText, { color: theme.textPrimary }]}>← Zurück</Text>
-        </Pressable>
-        <Pressable onPress={onRestart} style={[styles.btnStart, { backgroundColor: theme.accentBlue }]}>
+        </BaseButton>
+        <BaseButton onPress={onRestart} style={styles.btnStart}>
           <Text style={styles.btnStartText}>Nochmal</Text>
-        </Pressable>
+        </BaseButton>
       </View>
     </View>
   );

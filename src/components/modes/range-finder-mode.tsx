@@ -23,6 +23,7 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { PianoKeyboard } from '@/components/piano-keyboard';
+import { BaseButton } from '@/components/ui/base-button';
 import { StaffView } from '@/components/staff/staff-view';
 import {
   RangeFinder,
@@ -325,12 +326,9 @@ export function RangeFinderMode({ onExit }: RangeFinderModeProps) {
           >
             <Text style={styles.startCardAnimalBg}>{timeLimitEmoji}</Text>
             {!glitch ? (
-              <Pressable
-                onPress={handleGo}
-                style={[styles.goButton, { backgroundColor: theme.accentBlue }]}
-              >
+              <BaseButton onPress={handleGo} style={styles.goButton}>
                 <Text style={styles.goButtonText}>▶ Los geht's!</Text>
-              </Pressable>
+              </BaseButton>
             ) : null}
           </Animated.View>
         </View>
