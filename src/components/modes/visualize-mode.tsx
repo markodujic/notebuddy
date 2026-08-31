@@ -89,6 +89,8 @@ export function VisualizeMode({ onExit }: VisualizeModeProps) {
 
   const feedbackStartTimeRef = useRef(0);
   const feedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Verzögerte Antwort einer falschen Eingabe (wird erst bei skipToNext eingereicht). */
+  const pendingAnswerRef = useRef<number | null>(null);
   const phaseRef = useRef(phase);
   useEffect(() => {
     phaseRef.current = phase;
@@ -167,7 +169,18 @@ export function VisualizeMode({ onExit }: VisualizeModeProps) {
 
       // Session aktualisieren (1:1: richtige MIDI wenn korrekt, sonst target+1)
       const answerMidi = isCorrect ? targetMidi : targetMidi + 1;
-      session.submitNote(answerMidi);
+      if (isCorrect) {
+        // Richtig: sofort einreichen → Aufgabe wechselt (Auto-Advance).
+        session.submitNote(answerMidi);
+      } else {
+        // Falsch: Einreichen VERZÖGERN. submitNoteAnswer schaltet
+        // currentIndex sofort weiter → der exerciseKey-Reset-Effekt würde
+        // die Aufdeck-Phase (rote Note 1s, dann grüne Note) sofort
+        // abbrechen, während der 1s-Timeout später showStaff=true mitten
+        // in der nächsten Input-Phase setzte → überlagerte/flackernde
+        // Notenköpfe im Staff. Erst bei skipToNextQuestion einreichen.
+        pendingAnswerRef.current = answerMidi;
+      }
 
       setPhase('feedback');
       feedbackStartTimeRef.current = Date.now();
@@ -180,6 +193,7 @@ export function VisualizeMode({ onExit }: VisualizeModeProps) {
       } else {
         // Falsche Position 1s rot zeigen, dann richtige Note
         setTimeout(() => {
+          if (phaseRef.current !== 'feedback') return; // Aufgabe schon gewechselt → veraltet
           setWrongPosition(null);
           setShowStaff(true);
           feedbackStartTimeRef.current = Date.now();
@@ -216,6 +230,12 @@ export function VisualizeMode({ onExit }: VisualizeModeProps) {
     }
 
     if (phaseRef.current !== 'feedback') return;
+
+    // Verzögerte Antwort (falsch) jetzt einreichen, bevor weitergeschaltet wird
+    if (pendingAnswerRef.current !== null) {
+      session.submitNote(pendingAnswerRef.current);
+      pendingAnswerRef.current = null;
+    }
 
     setShowStaff(false);
     setWrongPosition(null);
@@ -272,6 +292,7 @@ export function VisualizeMode({ onExit }: VisualizeModeProps) {
     setPhase('input');
     setShowStaff(false);
     setWrongPosition(null);
+    pendingAnswerRef.current = null;
     setAppState('active');
 
     const allValid = getValidVisualizationNotes(clef);
