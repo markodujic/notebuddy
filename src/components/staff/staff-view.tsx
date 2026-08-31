@@ -630,6 +630,18 @@ const styles = StyleSheet.create({
   container: {
     alignItems: "center",
     justifyContent: "center",
+    // „Blatt"-Rahmen: abgerundet, feine Kante, weicher Schatten
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(128, 128, 128, 0.28)",
+    overflow: "hidden",
+    // iOS
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    // Android
+    elevation: 4,
   },
   touchLayer: {
     width: "100%",
