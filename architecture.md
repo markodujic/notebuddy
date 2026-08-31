@@ -237,3 +237,31 @@ Eine gute Architektur für **notebuddy** ist eine Expo-App mit:
 - strikter Entkopplung von Grafik und Audio
 
 So bleibt die App sowohl für Audio als auch für UI flüssig und gut wartbar.
+
+---
+
+## Performance-Pattern für Grafik & Animation (Stand 2026-08-31)
+
+Verbindliche Muster aus der UI-Politur (Details + Commits:
+`docs/ui-polish-roadmap.md`):
+
+1. **Statische Texturen als offscreen `SkPicture`** – alles, was sich nicht
+   pro Frame ändert (Pergament, Vignetten), einmalig per
+   `Skia.PictureRecorder` aufzeichnen und mit einem `<Picture />`-Draw-Call
+   rendern. Kein `Math.random()` im Render-Pfad.
+2. **Positionierung im Worklet, nicht im JS-State** – SharedValues, die im
+   selben `useAnimatedStyle`-Frame gelesen werden, sind pixel-synchron mit
+   nativen Transforms; JS-State-Spiegel laufen immer einen Frame hinterher
+   (Quelle des RangeSelector-Jitters).
+3. **Kontinuierliche Werte nativ, diskrete Werte als React-State** – Timer,
+   Fortschritte, Farbverläufe über SharedValues + `interpolateColor`;
+   `setState` nur bei diskreten Änderungen (z. B. Signatur-Vergleich im
+   Range-Finder-Polling).
+4. **Design-Tokens zentral** – Skia-Paletten in `src/constants/graphics.ts`,
+   keine Hex-Farben in Komponenten-Rendercode.
+5. **Basis-UI-Komponenten mit nativem Press-Feedback** – `BaseButton`
+   (`src/components/ui/base-button.tsx`) statt rohen `Pressable`s mit
+   Inline-Styles.
+6. **Teure Komponenten memoisieren** – `PianoKeyboard` ist `memo()`-wrapped.
+7. **Typografie statt Geometrie** – SMuFL-Glyphen (Bravura) statt gezeichneter
+   Formen, wo immer möglich; 1 em = 4 Staff-Spaces.
