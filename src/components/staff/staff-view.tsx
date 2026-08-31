@@ -21,7 +21,6 @@ import {
   Line,
   Picture,
   RoundedRect,
-  Text,
   useFont,
 } from "@shopify/react-native-skia";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";

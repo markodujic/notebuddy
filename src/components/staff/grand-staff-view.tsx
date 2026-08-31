@@ -1,46 +1,47 @@
-/**
+﻿/**
  * GrandStaffView – Skia-basiertes Doppelsystem (Violin- + Bassschlüssel).
  *
- * 1:1 aus notenlern-app GrandStaffView.svelte.
+ * 1:1 aus notenlern-app GrandStaffView.svelte, aber aufgebaut aus den
+ * gemeinsamen Staff-Primitives (staff-primitives.tsx) und dem geteilten
+ * Pergament-Picture → optisch identisch mit StaffView.
  *
  * Zeichnet:
- *   - Pergament-Hintergrund mit Textur
- *   - Violin-System (oben) + Bass-System (unten)
- *   - Akkolade-Klammer (Brace) verbindet beide
- *   - Durchgehende Taktlinie
- *   - Schlüssel für beide Systeme
+ *   - Pergament-Hintergrund als offscreen Picture (1 Draw-Call, Dark-Vignette)
+ *   - Violin-System (oben) + Bass-System (unten) via StaffLines
+ *   - Akkolade-Klammer (Brace) + durchgehende Taktlinie
+ *   - Schlüssel für beide Systeme via ClefGlyph
  *   - Note auf dem korrekten System (C4+ = Violin, <C4 = Bass)
- *   - Vorzeichen (Kreuz/b) wenn nötig
- *   - Hilfslinien für Noten außerhalb des Systems
+ *     als Bravura-Glyph (Ink-Box-zentriert) + Stem + Hilfslinien
  *
  * Nicht interaktiv — reine Display-Komponente.
  */
 
-import {
-    Canvas,
-    Group,
-    Line,
-    Path,
-    Rect,
-    Skia,
-    Text,
-    useFont,
-} from "@shopify/react-native-skia";
+import { Canvas, Line, Picture, Text, useFont } from "@shopify/react-native-skia";
 import { memo, useMemo } from "react";
-import { StyleSheet, View, useColorScheme } from "react-native";
+import { StyleSheet, View } from "react-native";
 
 import {
-    BRAVURA_FONT_FAMILY,
-    PARCHMENT_COLORS,
-    SMUFL,
-    STAFF_METRICS,
+  BRAVURA_FONT_FAMILY,
+  PARCHMENT_COLORS,
+  SMUFL,
+  STAFF_METRICS,
 } from "@/constants/music-font";
-import { getNoteStaffPosition } from "@/domain";
+import { getNoteStaffPosition, type Clef } from "@/domain";
+import { useAppStore } from "@/stores/app-store";
+import { useParchmentPicture } from "./parchment-picture";
+import { noteHeadGeom } from "./staff-glyphs";
 import {
-    STAFF_HEIGHT,
-    getLedgerLineYs,
-    getStaffLineYs,
-    getYForPosition,
+  ClefGlyph,
+  LedgerLines,
+  NoteHeadGlyph,
+  StaffLines,
+  Stem,
+} from "./staff-primitives";
+import {
+  STAFF_HEIGHT,
+  getLedgerLineYs,
+  getStaffLineYs,
+  getYForPosition,
 } from "./staff-geometry";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -59,111 +60,51 @@ export interface GrandStaffViewProps {
 /** Abstand zwischen Violin- und Bass-System. */
 const SYSTEM_SPACING = 40;
 
-/** Y-Offset für Notenkopf-Position in der Akkolade. */
+/** Y-Offset des Violinsystems. */
+const TREBLE_TOP_Y = 20;
+
+/** Oberer/unterer Rand links/rechts der Systemlinien. */
+const LINE_X_START = 20;
+const LINE_X_END = 20;
+
 const LEFT_MARGIN = 60;
 const NOTE_X_OFFSET = 0.65; // Note bei 65% der Breite
 
-// ── Helper: Oval Path ──────────────────────────────────────────────────────
-
-function makeOvalPath(
-  cx: number,
-  cy: number,
-  rx: number,
-  ry: number,
-): React.ComponentProps<typeof Path>["path"] {
-  const path = Skia.Path.Make();
-  path.addOval(Skia.XYWHRect(cx - rx, cy - ry, rx * 2, ry * 2));
-  return path;
-}
-
-// ── Parchment Texture ─────────────────────────────────────────────────────
-
-interface FiberRect {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-  color: string;
-  alpha: number;
-}
-
-interface FiberLine {
-  y: number;
-  color: string;
-  alpha: number;
-}
-
-/**
- * Generiert die Pergament-Textur (gleiche Logik wie StaffView).
- */
-function useParchmentTexture(
-  width: number,
-  height: number,
-  colors: (typeof PARCHMENT_COLORS)[keyof typeof PARCHMENT_COLORS],
-): { rects: FiberRect[]; lines: FiberLine[] } {
-  return useMemo(() => {
-    const rects: FiberRect[] = [];
-    const lines: FiberLine[] = [];
-
-    for (let px = 0; px < width; px += 4) {
-      for (let py = 0; py < height; py += 4) {
-        const noise = Math.random();
-        if (noise > 0.5) {
-          rects.push({
-            x: px,
-            y: py,
-            w: 4,
-            h: 4,
-            color: noise > 0.75 ? colors.fiber1 : colors.fiber2,
-            alpha: 0.03,
-          });
-        }
-      }
-    }
-
-    for (let fi = 0; fi < 12; fi++) {
-      lines.push({
-        y: Math.random() * height,
-        color: colors.fiber1,
-        alpha: 0.015,
-      });
-    }
-
-    return { rects, lines };
-  }, [width, height, colors]);
-}
-
-// ── Component ─────────────────────────────────────────────────────────────
+// ── Component ──────────────────────────────────────────────────────────────
 
 export const GrandStaffView = memo(function GrandStaffView({
   midi,
   noteColor,
-  width = 340,
+  width = STAFF_METRICS.CANVAS_SIZE,
 }: GrandStaffViewProps) {
-  const scheme = useColorScheme();
-  const isDark = scheme === "dark";
-
-  const parchmentColors = isDark
+  // Theme folgt dem App-Dark-Mode-Toggle (wie StaffView, eine Quelle der Wahrheit)
+  const darkMode = useAppStore((s) => s.darkMode);
+  const parchmentColors = darkMode
     ? PARCHMENT_COLORS.DARK
     : PARCHMENT_COLORS.LIGHT;
 
-  // Höhe: 2 Systeme + Abstand + etwas Rand
-  const height = STAFF_HEIGHT * 2 + SYSTEM_SPACING + 40;
+  // Höhe: 2 Systeme + Abstand + Rand oben/unten
+  const height = TREBLE_TOP_Y * 2 + STAFF_HEIGHT * 2 + SYSTEM_SPACING;
 
-  // Violin-System oben, Bass-System unten
-  const trebleTopY = 20;
+  const trebleTopY = TREBLE_TOP_Y;
   const bassTopY = trebleTopY + STAFF_HEIGHT + SYSTEM_SPACING;
 
   const trebleLineYs = useMemo(() => getStaffLineYs(trebleTopY), [trebleTopY]);
   const bassLineYs = useMemo(() => getStaffLineYs(bassTopY), [bassTopY]);
 
-  const bravuraFont = useFont(BRAVURA_FONT_FAMILY, 80);
+  const bravuraTrebleFont = useFont(BRAVURA_FONT_FAMILY, STAFF_METRICS.CLEF_TREBLE_SIZE);
+  const bravuraBassFont = useFont(BRAVURA_FONT_FAMILY, STAFF_METRICS.CLEF_BASS_SIZE);
   const braceFont = useFont(BRAVURA_FONT_FAMILY, height - trebleTopY + 20);
-  const texture = useParchmentTexture(width, height, parchmentColors);
+  // Notenkopf-Glyph: 1 em = 4 Staff-Spaces (SMuFL) → Kopf ist 1 Space hoch
+  const noteFont = useFont(BRAVURA_FONT_FAMILY, STAFF_METRICS.NOTE_GLYPH_FONT_SIZE);
+  const headGeom = noteHeadGeom(noteFont);
+
+  // Pergament als offscreen Picture (gecached, 1 Draw-Call, Dark-Vignette)
+  const parchment = useParchmentPicture(width, height, parchmentColors);
 
   // Bestimme, welches System verwendet wird (C4+ = treble, <C4 = bass)
   const useTreble = midi >= 60;
-  const clef = useTreble ? "treble" : "bass";
+  const clef: Clef = useTreble ? "treble" : "bass";
   const activeTopY = useTreble ? trebleTopY : bassTopY;
   const activeLineYs = useTreble ? trebleLineYs : bassLineYs;
 
@@ -184,95 +125,42 @@ export const GrandStaffView = memo(function GrandStaffView({
   // Middle line für Stem-Richtung
   const middleLineY = activeLineYs[2];
 
-  // Oval-Pfad für Note
-  const notePath = useMemo(
-    () =>
-      makeOvalPath(
-        noteX,
-        noteY,
-        STAFF_METRICS.NOTE_HEAD_RADIUS_X,
-        STAFF_METRICS.NOTE_HEAD_RADIUS_Y,
-      ),
-    [noteX, noteY],
-  );
-
   const color = noteColor ?? parchmentColors.noteHead;
 
   return (
     <View style={styles.container}>
       <Canvas style={{ width, height }}>
-        {/* ── Pergament-Hintergrund ── */}
-        <Rect
-          x={0}
-          y={0}
-          width={width}
-          height={height}
-          color={parchmentColors.bg}
+        {/* Pergament-Hintergrund + Textur + Vignette (1 Draw-Call) */}
+        {parchment && <Picture picture={parchment} />}
+
+        {/* Violin-System (5 Linien) */}
+        <StaffLines
+          lineYs={trebleLineYs}
+          x0={LEFT_MARGIN - LINE_X_START}
+          x1={width - LINE_X_END}
+          color={parchmentColors.staffLine}
         />
 
-        {/* Noise-Textur */}
-        <Group>
-          {texture.rects.map((r, i) => (
-            <Rect
-              key={`noise-${i}`}
-              x={r.x}
-              y={r.y}
-              width={r.w}
-              height={r.h}
-              color={r.color}
-              opacity={r.alpha}
-            />
-          ))}
-        </Group>
+        {/* Bass-System (5 Linien) */}
+        <StaffLines
+          lineYs={bassLineYs}
+          x0={LEFT_MARGIN - LINE_X_START}
+          x1={width - LINE_X_END}
+          color={parchmentColors.staffLine}
+        />
 
-        {/* Horizontale Fasern */}
-        <Group>
-          {texture.lines.map((l, i) => (
-            <Line
-              key={`fiber-${i}`}
-              p1={{ x: 0, y: l.y }}
-              p2={{ x: width, y: l.y + (Math.random() - 0.5) * 3 }}
-              color={l.color}
-              strokeWidth={0.5}
-              opacity={l.alpha}
-            />
-          ))}
-        </Group>
-
-        {/* ── Violin-System (5 Linien) ── */}
-        {trebleLineYs.map((y, i) => (
-          <Line
-            key={`treble-${i}`}
-            p1={{ x: LEFT_MARGIN - 40, y }}
-            p2={{ x: width - 20, y }}
-            color={parchmentColors.staffLine}
-            strokeWidth={1.5}
-          />
-        ))}
-
-        {/* ── Bass-System (5 Linien) ── */}
-        {bassLineYs.map((y, i) => (
-          <Line
-            key={`bass-${i}`}
-            p1={{ x: LEFT_MARGIN - 40, y }}
-            p2={{ x: width - 20, y }}
-            color={parchmentColors.staffLine}
-            strokeWidth={1.5}
-          />
-        ))}
-
-        {/* ── Durchgehende Taktlinie ── */}
+        {/* Durchgehende Taktlinie */}
         <Line
-          p1={{ x: LEFT_MARGIN - 42, y: trebleTopY }}
-          p2={{ x: LEFT_MARGIN - 42, y: bassTopY + STAFF_HEIGHT }}
+          p1={{ x: LEFT_MARGIN - LINE_X_START - 2, y: trebleTopY }}
+          p2={{ x: LEFT_MARGIN - LINE_X_START - 2, y: bassTopY + STAFF_HEIGHT }}
           color={parchmentColors.staffLine}
           strokeWidth={2.5}
         />
 
-        {/* ── Akkolade-Klammer (Brace) ── */}
+        {/* Akkolade-Klammer (Brace) */}
         {braceFont && (
           <Text
-            x={LEFT_MARGIN - 44}
+            x={LEFT_MARGIN - LINE_X_START - 4}
             y={trebleTopY + (height - trebleTopY) / 2 + 10}
             text={SMUFL.BRACE}
             font={braceFont}
@@ -280,69 +168,48 @@ export const GrandStaffView = memo(function GrandStaffView({
           />
         )}
 
-        {/* ── Violinschlüssel ── */}
-        {bravuraFont && (
-          <Text
-            x={LEFT_MARGIN - 10}
-            y={trebleLineYs[3]}
-            text={SMUFL.TREBLE_CLEF}
-            font={bravuraFont}
-            color={parchmentColors.clef}
-          />
-        )}
-
-        {/* ── Bassschlüssel ── */}
-        {bravuraFont && (
-          <Text
-            x={LEFT_MARGIN - 10}
-            y={bassLineYs[1]}
-            text={SMUFL.BASS_CLEF}
-            font={bravuraFont}
-            color={parchmentColors.clef}
-          />
-        )}
-
-        {/* ── Hilfslinien für die Note ── */}
-        {ledgerYs.map((y, i) => (
-          <Line
-            key={`ledger-${i}`}
-            p1={{ x: noteX - 20, y }}
-            p2={{ x: noteX + 20, y }}
-            color={parchmentColors.staffLine}
-            strokeWidth={1.5}
-          />
-        ))}
-
-        {/* ── Notenhals (Stem) ── */}
-        <Line
-          p1={{
-            x:
-              noteY > middleLineY
-                ? noteX + STAFF_METRICS.NOTE_HEAD_RADIUS_X
-                : noteX - STAFF_METRICS.NOTE_HEAD_RADIUS_X,
-            y: noteY,
-          }}
-          p2={{
-            x:
-              noteY > middleLineY
-                ? noteX + STAFF_METRICS.NOTE_HEAD_RADIUS_X
-                : noteX - STAFF_METRICS.NOTE_HEAD_RADIUS_X,
-            y:
-              noteY > middleLineY
-                ? noteY - STAFF_METRICS.STEM_HEIGHT
-                : noteY + STAFF_METRICS.STEM_HEIGHT,
-          }}
-          color={color}
-          strokeWidth={STAFF_METRICS.STEM_WIDTH}
+        {/* Schlüssel */}
+        <ClefGlyph
+          clef="treble"
+          x={LEFT_MARGIN - 10}
+          lineYs={trebleLineYs}
+          font={bravuraTrebleFont}
+          color={parchmentColors.clef}
+        />
+        <ClefGlyph
+          clef="bass"
+          x={LEFT_MARGIN - 10}
+          lineYs={bassLineYs}
+          font={bravuraBassFont}
+          color={parchmentColors.clef}
         />
 
-        {/* ── Notenkopf (Oval mit Rotation) ── */}
-        <Group
-          transform={[{ rotate: STAFF_METRICS.NOTE_HEAD_ROTATION }]}
-          origin={{ x: noteX, y: noteY }}
-        >
-          <Path path={notePath} color={color} />
-        </Group>
+        {/* Hilfslinien für die Note */}
+        <LedgerLines
+          ys={ledgerYs}
+          noteX={noteX}
+          color={parchmentColors.staffLine}
+        />
+
+        {/* Notenhals (Stem) */}
+        <Stem
+          x={noteX}
+          noteY={noteY}
+          middleLineY={middleLineY}
+          halfWidth={headGeom.centerX}
+          color={color}
+        />
+
+        {/* Notenkopf als Bravura-Glyph (wie StaffView) */}
+        {noteFont && (
+          <NoteHeadGlyph
+            font={noteFont}
+            geom={headGeom}
+            x={noteX}
+            y={noteY}
+            color={color}
+          />
+        )}
       </Canvas>
     </View>
   );
@@ -352,5 +219,17 @@ const styles = StyleSheet.create({
   container: {
     alignItems: "center",
     justifyContent: "center",
+    // „Blatt"-Rahmen wie StaffView: abgerundet, feine Kante, weicher Schatten
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(128, 128, 128, 0.28)",
+    overflow: "hidden",
+    // iOS
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    // Android
+    elevation: 4,
   },
 });
