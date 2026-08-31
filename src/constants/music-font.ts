@@ -55,8 +55,8 @@ export const STAFF_METRICS = {
   NOTE_GLYPH_FONT_SIZE: 96, // LINE_SPACING (24) × 4
   /** Notenhals-Länge (px). */
   STEM_HEIGHT: 67,
-  /** Notenhals-Breite. */
-  STEM_WIDTH: 2.5,
+  /** Notenhals-Breite (Notationsstandard: 0.12 spaces = 2.9px bei 24px Space). */
+  STEM_WIDTH: 2.9,
   /** Notenhals-Offset vom Notenzentrum (Original: ±12, nicht Radius 13). */
   STEM_OFFSET_X: 12,
   /** Violinschlüssel-Font-Größe (Original: 107px Bravura). */
@@ -72,8 +72,8 @@ export const STAFF_METRICS = {
   LEDGER_CLEAR_EXTEND: 22,
   /** Alpha für Guide-Hilfslinien (Orientierungslinien). */
   GUIDE_LEDGER_ALPHA: 0.15,
-  /** Dicke einer Hilfslinie (für Noten außerhalb des Systems). */
-  LEDGER_LINE_WIDTH: 1.5,
+  /** Dicke einer Hilfslinie (Notationsstandard: schwerer als Systemlinien). */
+  LEDGER_LINE_WIDTH: 2.25,
   /** Hover-Indikator Kreis-Radius. */
   HOVER_RADIUS: 16,
   /** Hover-Indikator Alpha. */
