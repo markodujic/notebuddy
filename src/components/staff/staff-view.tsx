@@ -19,11 +19,14 @@ import {
   Canvas,
   Group,
   Line,
+  Picture,
   Rect,
   RoundedRect,
+  Skia,
   Text,
   useFont,
   type SkFont,
+  type SkPicture,
 } from "@shopify/react-native-skia";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
@@ -99,68 +102,58 @@ function glyphHalfWidth(font: SkFont, text: string): number {
   return (typeof m === "number" ? m : m.width) / 2;
 }
 
-// ── Parchment Texture (cached) ────────────────────────────────────────────
-
-interface FiberRect {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-  color: string;
-  alpha: number;
-}
-
-interface FiberLine {
-  y: number;
-  color: string;
-  alpha: number;
-}
-
-interface ParchmentTexture {
-  rects: FiberRect[];
-  lines: FiberLine[];
-}
+// ── Parchment Texture (einmalig offscreen gezeichnet, 1 Draw-Call) ─────────
 
 /**
- * Generiert die Pergament-Textur (Rauschen + horizontale Fasern).
- * Wie createTextureCache() in der alten InteractiveStaffView.svelte.
+ * Zeichnet die Pergament-Textur (Hintergrund + Rauschen + Fasern) einmalig
+ * in ein offscreen Skia-Picture. Beim Rendern kostet es genau einen
+ * Draw-Call statt ~800 einzelner Rects/Lines – und die Zufallswerte
+ * (Faser-Enden) bleiben fixiert, statt bei jedem Re-Render zu zappeln.
  */
-function useParchmentTexture(
+function useParchmentPicture(
   width: number,
   height: number,
   colors: (typeof PARCHMENT_COLORS)[keyof typeof PARCHMENT_COLORS],
-): ParchmentTexture {
+): SkPicture | null {
   return useMemo(() => {
-    const rects: FiberRect[] = [];
-    const lines: FiberLine[] = [];
+    if (width <= 0 || height <= 0) return null;
+    const recorder = Skia.PictureRecorder();
+    const canvas = recorder.beginRecording(
+      Skia.XYWHRect(0, 0, width, height),
+    );
 
-    // Subtle noise (4×4 Pixel Blöcke)
+    // Hintergrund
+    const bgPaint = Skia.Paint();
+    bgPaint.setColor(Skia.Color(colors.bg));
+    canvas.drawRect(Skia.XYWHRect(0, 0, width, height), bgPaint);
+
+    // Subtle noise (4×4 Pixel Blöcke, wie createTextureCache() im Original)
+    const noisePaint = Skia.Paint();
     for (let px = 0; px < width; px += 4) {
       for (let py = 0; py < height; py += 4) {
         const noise = Math.random();
         if (noise > 0.5) {
-          rects.push({
-            x: px,
-            y: py,
-            w: 4,
-            h: 4,
-            color: noise > 0.75 ? colors.fiber1 : colors.fiber2,
-            alpha: 0.03,
-          });
+          noisePaint.setColor(
+            Skia.Color(noise > 0.75 ? colors.fiber1 : colors.fiber2),
+          );
+          noisePaint.setAlphaf(0.03);
+          canvas.drawRect(Skia.XYWHRect(px, py, 4, 4), noisePaint);
         }
       }
     }
 
-    // Horizontal fibers (12 zufällige Linien)
+    // Horizontal fibers (12 zufällige Linien, Enden einmalig fixiert)
+    const fiberPaint = Skia.Paint();
+    fiberPaint.setStrokeWidth(0.5);
+    fiberPaint.setAlphaf(0.015);
+    fiberPaint.setColor(Skia.Color(colors.fiber1));
     for (let fi = 0; fi < 12; fi++) {
-      lines.push({
-        y: Math.random() * height,
-        color: colors.fiber1,
-        alpha: 0.015,
-      });
+      const y = Math.random() * height;
+      const endY = y + (Math.random() - 0.5) * 3;
+      canvas.drawLine(0, y, width, endY, fiberPaint);
     }
 
-    return { rects, lines };
+    return recorder.finishRecordingAsPicture();
   }, [width, height, colors]);
 }
 
@@ -188,8 +181,8 @@ function StaffCanvasInner({
   const clefX = STAFF_METRICS.CLEF_X; // LEFT_MARGIN + 40 (1:1 wie alte App)
   const noteX = width / 2;
 
-  // Pergament-Textur generieren (gecached)
-  const texture = useParchmentTexture(width, height, parchmentColors);
+  // Pergament als offscreen Picture (gecached, 1 Draw-Call)
+  const parchment = useParchmentPicture(width, height, parchmentColors);
 
   // Guide-Hilfslinien (subtil, alpha=0.15) — Positionen 1,3,5,7,9 oben+unten
   const guideLedgers = useMemo(() => {
@@ -236,43 +229,8 @@ function StaffCanvasInner({
 
   return (
     <Canvas style={{ width, height }}>
-      {/* ── Pergament-Hintergrund ── */}
-      <Rect
-        x={0}
-        y={0}
-        width={width}
-        height={height}
-        color={parchmentColors.bg}
-      />
-
-      {/* Noise-Textur (Punkte) */}
-      <Group>
-        {texture.rects.map((r, i) => (
-          <Rect
-            key={`noise-${i}`}
-            x={r.x}
-            y={r.y}
-            width={r.w}
-            height={r.h}
-            color={r.color}
-            opacity={r.alpha}
-          />
-        ))}
-      </Group>
-
-      {/* Horizontale Fasern */}
-      <Group>
-        {texture.lines.map((l, i) => (
-          <Line
-            key={`fiber-${i}`}
-            p1={{ x: 0, y: l.y }}
-            p2={{ x: width, y: l.y + (Math.random() - 0.5) * 3 }}
-            color={l.color}
-            strokeWidth={0.5}
-            opacity={l.alpha}
-          />
-        ))}
-      </Group>
+      {/* ── Pergament-Hintergrund + Textur (ein Draw-Call) ── */}
+      {parchment && <Picture picture={parchment} />}
 
       {/* ── Guide-Hilfslinien (subtile Orientierung) ── */}
       <Group opacity={STAFF_METRICS.GUIDE_LEDGER_ALPHA}>
