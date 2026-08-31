@@ -16,7 +16,11 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
-import Animated from 'react-native-reanimated';
+import Animated, {
+  interpolateColor,
+  useAnimatedStyle,
+  useSharedValue,
+} from 'react-native-reanimated';
 
 import { PianoKeyboard } from '@/components/piano-keyboard';
 import { StaffView } from '@/components/staff/staff-view';
@@ -63,21 +67,6 @@ const shakePulse = {
   to: { transform: [{ translateX: 1.5 }] },
 } as const;
 
-/** Interpoliert zwei Hex-Farben ( Ersatz für CSS color-mix, 1:1 #e8e4e0→#ffcc00). */
-function mixColors(from: string, to: string, t: number): string {
-  const parse = (hex: string) => [
-    parseInt(hex.slice(1, 3), 16),
-    parseInt(hex.slice(3, 5), 16),
-    parseInt(hex.slice(5, 7), 16),
-  ];
-  const [r1, g1, b1] = parse(from);
-  const [r2, g2, b2] = parse(to);
-  const r = Math.round(r1 + (r2 - r1) * t);
-  const g = Math.round(g1 + (g2 - g1) * t);
-  const b = Math.round(b1 + (b2 - b1) * t);
-  return `rgb(${r}, ${g}, ${b})`;
-}
-
 export type RangeFinderModeProps = {
   onExit: () => void;
 };
@@ -99,6 +88,7 @@ export function RangeFinderMode({ onExit }: RangeFinderModeProps) {
   // ── Local state (1:1) ──
   const [phase, setPhase] = useState<ModePhase>('start');
   const [rfState, setRfState] = useState<RangeFinderState | null>(null);
+  const lastStateSigRef = useRef('');
   const [feedback, setFeedback] = useState<'correct' | 'incorrect' | null>(null);
   const [feedbackNoteName, setFeedbackNoteName] = useState('');
   const [showStaff, setShowStaff] = useState(false);
@@ -170,12 +160,28 @@ export function RangeFinderMode({ onExit }: RangeFinderModeProps) {
     rf.start();
     setRfState(rf.getState());
 
-    // State alle 100ms pollen (Timer-Updates)
+    // State pollen: Timer nativ (SharedValue), Re-Render nur bei diskreten
+    // Änderungen (Note, Clef, Range, Complete) – nicht 10×/s die ganze Mode.
     pollIntervalRef.current = setInterval(() => {
       const current = rangeFinderRef.current;
       if (!current) return;
       const state = current.getState();
-      setRfState(state);
+
+      timerProgressSv.value = Math.max(
+        0,
+        Math.min(1, state.timeRemaining / (timeLimitRef.current * 1000)),
+      );
+
+      const sig = `${state.currentNoteMidi}|${state.currentClef}|${
+        state.foundRange
+          ? `${state.foundRange.minMidi}-${state.foundRange.maxMidi}`
+          : ''
+      }|${state.isComplete}`;
+      if (sig !== lastStateSigRef.current) {
+        lastStateSigRef.current = sig;
+        setRfState(state);
+      }
+
       if (state.isComplete) {
         // finishRangeFinder 1:1
         current.destroy();
@@ -256,10 +262,25 @@ export function RangeFinderMode({ onExit }: RangeFinderModeProps) {
   const badgeFont = Math.round(boxSize * 0.45);
 
   const timeLimitEmoji = TIME_LIMIT_EMOJIS[timeLimit] ?? '🐇';
-  const timerProgress =
-    rfState && phase === 'testing'
-      ? Math.max(0, Math.min(1, rfState.timeRemaining / (timeLimit * 1000)))
-      : 1;
+  // Timer läuft nativ (SharedValue) – löst KEIN Re-Render der ganzen Mode aus.
+  const timerProgressSv = useSharedValue(1);
+
+  // Native Timer-Animationen (breite + Farbe, 0 Re-Renders)
+  const timerBarStyle = useAnimatedStyle(() => ({
+    width: `${timerProgressSv.value * 100}%`,
+    backgroundColor: interpolateColor(
+      timerProgressSv.value,
+      [0, 0.3, 1],
+      ['#f44336', '#f44336', theme.accentBlue],
+    ),
+  }));
+  const noteBadgeColor = useAnimatedStyle(() => ({
+    color: interpolateColor(
+      timerProgressSv.value,
+      [0, 1],
+      ['#ffcc00', '#e8e4e0'],
+    ),
+  }));
 
   const currentNoteName =
     rfState?.currentNoteMidi !== null && rfState?.currentNoteMidi !== undefined
@@ -407,10 +428,10 @@ export function RangeFinderMode({ onExit }: RangeFinderModeProps) {
                     <Animated.Text
                       style={[
                         styles.noteBadgeText,
+                        noteBadgeColor,
                         {
                           fontSize: badgeFont,
                           lineHeight: badgeFont * 1.15,
-                          color: mixColors('#ffcc00', '#e8e4e0', timerProgress),
                           animationName: shakePulse,
                           animationDuration: '100ms',
                           animationDirection: 'alternate',
@@ -428,14 +449,8 @@ export function RangeFinderMode({ onExit }: RangeFinderModeProps) {
             {/* Staff mit Timer-Balken (1:1) */}
             <View style={{ width: boxSize, alignItems: 'center' }}>
               <View style={[styles.timerBarContainer, { backgroundColor: theme.timerBg }]}>
-                <View
-                  style={[
-                    styles.timerBar,
-                    {
-                      width: `${timerProgress * 100}%`,
-                      backgroundColor: timerProgress < 0.3 ? '#f44336' : theme.accentBlue,
-                    },
-                  ]}
+                <Animated.View
+                  style={[styles.timerBar, timerBarStyle]}
                 />
               </View>
               <StaffView
