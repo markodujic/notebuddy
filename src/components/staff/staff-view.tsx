@@ -99,13 +99,24 @@ type StaffCanvasProps = {
 
 // ── Helpers: Bravura-Glyph-Messung ──────────────────────────────────────────
 
+/** Geometrie eines Bravura-Glyphs relativ zur Text-Baseline (Ursprung). */
+export interface GlyphGeom {
+  /** Distanz Baseline → horizontaler Glyph-Mittelpunkt (immer > 0). */
+  centerX: number;
+  /** Distanz Baseline → vertikaler Glyph-Mittelpunkt (negativ = oberhalb). */
+  centerY: number;
+}
+
 /**
- * Halbe Breite eines Bravura-Glyphs (für zentriertes Zeichnen).
- * SMuFL: Notenkopf-Origin liegt links, vertikal zentriert auf der Baseline.
+ * Misst ein Bravura-Glyph metrikunabhängig über seine Ink-Box (SkRect).
+ * `measureText` liefert ein Rect mit `y` relativ zur Baseline (negativ =
+ * darüber). Damit lassen sich Glyphen exakt auf einer Zielposition zentrieren,
+ * egal wie die Font ihre Boxen zur Baseline legt (SMuFL-Nominalkonvention
+ * „Notenkopf baselinezentriert" wird NICHT vorausgesetzt).
  */
-function glyphHalfWidth(font: SkFont, text: string): number {
-  const m = font.measureText(text) as number | { width: number };
-  return (typeof m === "number" ? m : m.width) / 2;
+function glyphGeom(font: SkFont, text: string): GlyphGeom {
+  const r = font.measureText(text);
+  return { centerX: r.x + r.width / 2, centerY: r.y + r.height / 2 };
 }
 
 // ── Parchment Texture (einmalig offscreen gezeichnet, 1 Draw-Call) ─────────
@@ -246,11 +257,15 @@ function StaffCanvasInner({
   // Shake-Transform für die falsche Note (nativ, UI-Thread)
   const wrongShake = useDerivedValue(() => [{ translateX: shakeX.value }]);
 
-  // Notenkopf-Halbbreite (gemessen) – Hals sitzt exakt an der Glyph-Kante
-  const headHalfW = noteFont
-    ? glyphHalfWidth(noteFont, SMUFL.NOTE_HEAD_FILLED)
-    : (STAFF_METRICS.NOTE_HEAD_WIDTH_SPACES * STAFF_METRICS.LINE_SPACING) / 2;
-  const stemOffsetX = headHalfW;
+  // Notenkopf-Geometrie (gemessen) – Kopf exakt auf Note-Position zentrieren:
+// Baseline-Y = noteY − centerY, X = noteX − centerX (Ink-Box-Mitte)
+  const headGeom: GlyphGeom = noteFont
+    ? glyphGeom(noteFont, SMUFL.NOTE_HEAD_FILLED)
+    : {
+        centerX: (STAFF_METRICS.NOTE_HEAD_WIDTH_SPACES * STAFF_METRICS.LINE_SPACING) / 2,
+        centerY: 0,
+      };
+  const stemOffsetX = headGeom.centerX;
 
   return (
     <Canvas style={{ width, height }}>
@@ -365,11 +380,11 @@ function StaffCanvasInner({
             strokeWidth={STAFF_METRICS.STEM_WIDTH}
             opacity={blinkOpacity}
           />
-          {/* Notenkopf als Bravura-Glyph (SMuFL, typografisch korrekt) */}
+          {/* Notenkopf als Bravura-Glyph (Ink-Box auf wrongY zentriert) */}
           {noteFont && (
             <Text
-              x={noteX - headHalfW}
-              y={wrongY}
+              x={noteX - headGeom.centerX}
+              y={wrongY - headGeom.centerY}
               text={SMUFL.NOTE_HEAD_FILLED}
               font={noteFont}
               color={STAFF_FEEDBACK_COLORS.WRONG_BLINK}
@@ -385,8 +400,8 @@ function StaffCanvasInner({
           {/* Glow-Effekt für korrekte Antworten (grüner Ring um Glyph) */}
           {showGlow && noteFont && (
             <Text
-              x={noteX - headHalfW}
-              y={displayY}
+              x={noteX - headGeom.centerX}
+              y={displayY - headGeom.centerY}
               text={SMUFL.NOTE_HEAD_FILLED}
               font={noteFont}
               color={STAFF_FEEDBACK_COLORS.CORRECT_GLOW}
@@ -419,11 +434,11 @@ function StaffCanvasInner({
             strokeWidth={STAFF_METRICS.STEM_WIDTH}
             opacity={fadeOpacity}
           />
-          {/* Notenkopf als Bravura-Glyph (SMuFL, typografisch korrekt) */}
+          {/* Notenkopf als Bravura-Glyph (Ink-Box auf displayY zentriert) */}
           {noteFont && (
             <Text
-              x={noteX - headHalfW}
-              y={displayY}
+              x={noteX - headGeom.centerX}
+              y={displayY - headGeom.centerY}
               text={SMUFL.NOTE_HEAD_FILLED}
               font={noteFont}
               color={displayColor}
@@ -458,8 +473,8 @@ function StaffCanvasInner({
           {/* Notenkopf-Umriss als Glyph */}
           {noteFont && (
             <Text
-              x={noteX - headHalfW}
-              y={hoverY}
+              x={noteX - headGeom.centerX}
+              y={hoverY - headGeom.centerY}
               text={SMUFL.NOTE_HEAD_FILLED}
               font={noteFont}
               color={STAFF_FEEDBACK_COLORS.HOVER_STROKE}
