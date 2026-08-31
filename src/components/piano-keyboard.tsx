@@ -21,6 +21,7 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { ThemedView } from "@/components/themed-view";
+import { KEY_GRADIENTS } from "@/constants/graphics";
 import { Spacing } from "@/constants/theme";
 
 export type KeyboardZoomMode = "overview" | "focus" | "detail";
@@ -84,13 +85,6 @@ const OVERVIEW_PERSPECTIVE = 2000;
 const KEY_DEPTH = 6;
 /** Anteil der Taste, der als Frontkante (dunkler) gezeichnet wird */
 const FRONT_FACE_RATIO = 0.08;
-
-/** Premium-Verläufe (gleiche Palette wie RangeSelector). */
-const KEY_GRADIENTS = {
-  whiteIdle: ["#fdfdfb", "#e8e5de"],
-  whiteRange: ["#ddd6fe", "#a78bfa"],
-  blackIdle: ["#3d3d49", "#141419"],
-} as const;
 
 /** Vertikaler Verlauf als Paint-Kind eines Rects (falls nicht dimmed/state). */
 function KeyGradient({ colors, height }: { colors: readonly [string, string] | readonly string[]; height: number }) {

@@ -32,6 +32,7 @@ import {
 import Animated from 'react-native-reanimated';
 
 import { getNotation } from '@/domain';
+import { KEY_GRADIENTS } from '@/constants/graphics';
 import { useTheme } from '@/hooks/use-theme';
 
 const KEYBOARD_START = 21; // A0
@@ -358,8 +359,8 @@ export function RangeSelector({ minMidi, maxMidi, onChange }: RangeSelectorProps
           : midi === maxMidi
             ? ['#ffc46b', '#f08c00']
             : inRangeKey
-              ? ['#ddd6fe', '#a78bfa']
-              : ['#fdfdfb', '#e8e5de'];
+              ? KEY_GRADIENTS.whiteRange
+              : KEY_GRADIENTS.whiteIdle;
       return (
         <Group key={`w${midi}`}>
           <RoundedRect x={x} y={0} width={w} height={KEYBOARD_HEIGHT} r={1}>
@@ -401,7 +402,7 @@ export function RangeSelector({ minMidi, maxMidi, onChange }: RangeSelectorProps
             ) : inRangeKey ? (
               <LinearGradient start={Skia.Point(0, 0)} end={Skia.Point(0, h)} colors={['#8b5cf6', '#5b21b6']} />
             ) : (
-              <LinearGradient start={Skia.Point(0, 0)} end={Skia.Point(0, h)} colors={['#3d3d49', '#141419']} />
+              <LinearGradient start={Skia.Point(0, 0)} end={Skia.Point(0, h)} colors={KEY_GRADIENTS.blackIdle} />
             )}
           </RoundedRect>
           <RoundedRect
