@@ -2,9 +2,9 @@
  * Reanimated + Worklets – Setup-Check (offizieller Weg).
  *
  * Prüft vor einem Dev-Build nur das, was laut offizieller Doku nötig ist
- * (https://docs.expo.dev/versions/v56.0.0/sdk/reanimated/):
+ * (https://docs.expo.dev/versions/v57.0.0/sdk/reanimated/):
  *  1. reanimated + worklets installiert
- *  2. Versions-Paar kompatibel (reanimated 4.x ↔ worklets 0.8.x, RN 0.85)
+ *  2. Versions-Paar kompatibel (reanimated 4.x ↔ worklets 0.10.x, RN 0.86)
  *  3. reanimatED's eigene Build-Validierung (validate-worklets-build.js) bestanden
  *  4. babel-preset-expo hat das reanimated/worklets-Plugin geladen
  *
@@ -27,24 +27,24 @@ const ok = (m) => console.log(`  ✓ ${m}`);
 // war ein Tippfehler "expo": "^46.0.21" (SDK 46 / RN 0.69 von 2022) in der
 // package.json. expo@46 generiert iOS-Projekte OHNE New-Architecture-Codegen,
 // daher wird der Codegen-Header rnworklets.h nie erzeugt.
-console.log('\n[0/5] expo-Basiselement auf SDK 56?');
+console.log('\n[0/5] expo-Basiselement auf SDK 57?');
 const expoPkgPath = path.join(NM, 'expo', 'package.json');
 const rootPkgPath = path.join(__dirname, '..', 'package.json');
 if (fs.existsSync(rootPkgPath)) {
   const rootPkg = JSON.parse(fs.readFileSync(rootPkgPath, 'utf8'));
   const rootExpoSpec = rootPkg.dependencies && rootPkg.dependencies.expo;
-  const isSdk56Spec = /^~?56\./.test(rootExpoSpec || '');
-  isSdk56Spec
-    ? ok(`package.json expo="${rootExpoSpec}" (SDK 56)`)
-    : fail(`package.json expo="${rootExpoSpec}" – MUSS ~56.0.x sein (SDK 56). ` +
-           `Ein expo der Hauptversion <56 (z.B. 46) erzeugt keine New-Arch-Codegen-Projekte ` +
-           `→ 'rnworklets/rnworklets.h file not found'. Korrigiere auf "expo": "~56.0.0".`);
+  const isSdk57Spec = /^[~^]?57\./.test(rootExpoSpec || '');
+  isSdk57Spec
+    ? ok(`package.json expo="${rootExpoSpec}" (SDK 57)`)
+    : fail(`package.json expo="${rootExpoSpec}" – MUSS ~57.0.x sein (SDK 57). ` +
+           `Ein expo der Hauptversion <57 (z.B. 46) erzeugt keine New-Arch-Codegen-Projekte ` +
+           `→ 'rnworklets/rnworklets.h file not found'. Korrigiere auf "expo": "~57.0.0".`);
 }
 if (fs.existsSync(expoPkgPath)) {
   const installed = require(expoPkgPath).version;
-  /^56\./.test(installed)
-    ? ok(`installiert: expo@${installed} (SDK 56)`)
-    : fail(`installiert: expo@${installed} – MUSS 56.x sein. ` +
+  /^57\./.test(installed)
+    ? ok(`installiert: expo@${installed} (SDK 57)`)
+    : fail(`installiert: expo@${installed} – MUSS 57.x sein. ` +
            `Reset (node_modules + package-lock löschen) + \`npm install\` nach Korrektur der package.json.`);
 } else {
   fail('expo-Paket fehlt in node_modules.');
@@ -74,7 +74,7 @@ if (fs.existsSync(rea) && fs.existsSync(wl)) {
     const m = expected.match(/^(\d+)\.(\d+)\.x$/); // Format wie von reanimated genutzt
     return !m || w.startsWith(`${m[1]}.${m[2]}.`); // keine Range / Treffer = ok
   })()
-    ? ok(`reanimated ${r} ↔ worklets ${w} (kompatibel laut compatibility.json / RN 0.81–0.85)`)
+    ? ok(`reanimated ${r} ↔ worklets ${w} (kompatibel laut peerDependencies / RN 0.83–0.86)`)
     : fail(`Inkompatibel: reanimated ${r} ↔ worklets ${w}. Passende Versionen via \`npx expo install react-native-reanimated react-native-worklets\` setzen.`);
 } else {
   fail('Versionen nicht prüfbar (Pakete fehlen).');
